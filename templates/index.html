@@ -819,7 +819,7 @@
           <div><div class="k">Width</div><div class="v" data-f="hidden"></div></div>
           <div><div class="k">Vocabulary</div><div class="v" data-f="vocab"></div></div>
           <div><div class="k">Context</div><div class="v" data-f="ctx"></div></div>
-          <div><div class="k">Weights</div><div class="v" data-f="total"></div></div>
+          <div><div class="k">Weight count</div><div class="v" data-f="total"></div></div>
           <div><div class="k">Read per word</div><div class="v" data-f="active"></div></div>
         </div>
 
@@ -1960,7 +1960,7 @@ window.__files = F;
         q: k.ladder,
         reference: "mxfp4 (original)",
         noFullPrecision: true,
-        shardNote: " These are shard 1 of 4 — only the first carries the settings and vocabulary.",
+        shardNote: " Summed across all four shards — only the first carries the settings and vocabulary, the others hold 82 bytes each.",
         exact: (function () {
           var st = k.shardTable, sum = function (f) {
             return st.reduce(function (a, r) { return a + r[f]; }, 0);
@@ -2073,8 +2073,12 @@ window.__files = F;
       set("vocab", (m.vocab / 1024) + " <small>K</small>");
       set("ctx", (m.ctx >= 1048576 ? (m.ctx / 1048576) + " <small>M words</small>"
                                      : (m.ctx / 1024) + " <small>K words</small>"));
-      set("total", (m.total / 1e9).toFixed(1) + " <small>B</small>");
-      set("active", (m.active / 1e9).toFixed(1) + " <small>B</small>");
+      var count = function (n) {
+        return n >= 1e12 ? (n / 1e12).toFixed(2) + " <small>trillion</small>"
+                         : (n / 1e9).toFixed(1) + " <small>billion</small>";
+      };
+      set("total", count(m.total));
+      set("active", count(m.active));
 
       var ex = m.exact, nsh = ex && ex.shards > 1 ? ex.shards : 0;
       var per = nsh ? " <span class='u'>× " + nsh + "</span>" : "";
@@ -2095,7 +2099,7 @@ window.__files = F;
       var fileTotal = m.exact ? m.exact.total : 24 + m.meta + d.index + d.blob;
       var share = d.blob / fileTotal * 100;
       var shareTxt = share > 99.99 ? "over 99.99%" : share.toFixed(2) + "%";
-      set("xsHdr", "24 B");
+      set("xsHdr", (ex ? ex.header : 24) + " B");
       set("xsMeta", (m.meta / 1e6).toFixed(2) + " MB");
       set("xsIdx", (d.index >= 1e6 ? (d.index / 1e6).toFixed(1) + " MB"
                                    : (d.index / 1e3).toFixed(0) + " KB"));
