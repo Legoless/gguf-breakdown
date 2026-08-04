@@ -484,6 +484,23 @@ table{border-collapse:collapse}
     color:var(--paper);border:1px solid var(--signal);border-radius:3px;
     padding:8px 12px;cursor:pointer;line-height:1}
 
+  /* ---------- optional deep dive ---------- */
+  .deep{margin-top:var(--s5);border-top:2px solid var(--rule);padding-top:var(--s4)}
+  .deep>summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:5px;
+    padding:var(--s3);border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);
+    transition:border-color .18s}
+  .deep>summary::-webkit-details-marker{display:none}
+  .deep>summary:hover{border-color:var(--signal)}
+  .deep>summary:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  .deep .dlabel{font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;
+    letter-spacing:.18em;color:var(--brass)}
+  .deep .dtitle{font-family:var(--f-mono);font-size:clamp(1rem,2.4vw,1.3rem);color:var(--ink);
+    letter-spacing:-.02em}
+  .deep .dtitle::after{content:" ▸";color:var(--signal)}
+  .deep[open] .dtitle::after{content:" ▾"}
+  .deep .dhint{font-size:14px;color:var(--muted)}
+  .deep[open]>summary{margin-bottom:var(--s3)}
+
   /* ---------- part break ---------- */
   .partbreak{padding:var(--s5) 0 0;border-top:2px solid var(--rule);margin-top:var(--s5)}
   .partbreak .plabel{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;
@@ -787,21 +804,12 @@ table{border-collapse:collapse}
   <nav class="rail" aria-label="Load sequence">
     <div class="rail-title">Load sequence</div>
     <ul class="rail-list">
-      <li><a href="#pick"><span class="n">00</span><span>Pick a file</span></a></li>
-      <li><a href="#s1"><span class="n">01</span><span>Open the file</span></a></li>
-      <li><a href="#s2"><span class="n">02</span><span>Read the spec</span></a></li>
-      <li><a href="#s3"><span class="n">03</span><span>Read the index</span></a></li>
-      <li><a href="#s4"><span class="n">04</span><span>Map, don't load</span></a></li>
-      <li><a href="#s5"><span class="n">05</span><span>Packed numbers</span></a></li>
-      <li><a href="#s6"><span class="n">06</span><span>Never unpack</span></a></li>
-      <li><a href="#s7"><span class="n">07</span><span>Split CPU / GPU</span></a></li>
-      <li><a href="#s8"><span class="n">08</span><span>Run it</span></a></li>
-      <li><a href="#s9"><span class="n">09</span><span>Why it's fast</span></a></li>
-      <li class="railgap"><a href="#part2"><span class="n">▾</span><span>Real files</span></a></li>
-      <li><a href="#sec-pick"><span class="n">10</span><span>Pick a file</span></a></li>
-      <li><a href="#sec-zoom"><span class="n">11</span><span>Three steps</span></a></li>
-      <li><a href="#sec-experts"><span class="n">12</span><span>16 of 896</span></a></li>
-      <li><a href="#sec-RAW"><span class="n">13</span><span>Raw records</span></a></li>
+      <li><a href="#s1"><span class="n">01</span><span>One file</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>The label at the front</span></a></li>
+      <li><a href="#s4"><span class="n">03</span><span>Mapped, not loaded</span></a></li>
+      <li><a href="#s5"><span class="n">04</span><span>Packed small</span></a></li>
+      <li><a href="#s8"><span class="n">05</span><span>Running it</span></a></li>
+      <li class="railgap"><a href="#deep"><span class="n">▾</span><span>A real file</span></a></li>
     </ul>
   </nav>
 
@@ -828,6 +836,15 @@ table{border-collapse:collapse}
           <dd>Every number gets read <b>once per word produced</b>. That's a bandwidth problem, not a math problem.</dd>
         </div>
       </dl>
+
+      <div class="statgrid">
+          <div><div class="k">Layers</div><div class="v" data-f="layers"></div></div>
+          <div><div class="k">Width</div><div class="v" data-f="hidden"></div></div>
+          <div><div class="k">Vocabulary</div><div class="v" data-f="vocab"></div></div>
+          <div><div class="k">Context</div><div class="v" data-f="ctx"></div></div>
+          <div><div class="k">Weights</div><div class="v" data-f="total"></div></div>
+          <div><div class="k">Read per word</div><div class="v" data-f="active"></div></div>
+        </div>
 
       <figure class="rise fig-lead">
         <svg viewBox="0 0 720 210" role="img" aria-label="Cross-section of a GGUF file: a small header, a metadata section, a tensor index, and a very large block of weight data.">
@@ -881,67 +898,10 @@ table{border-collapse:collapse}
     </header>
 
     <!-- ================= SELECTOR ================= -->
-    <section class="step" id="pick">
-      <div class="eyebrow"><span class="n">00</span><span>Pick a file</span></div>
-      <h2>A real one, with real numbers</h2>
-      <p>Google's <b>Gemma 4</b> shipped in April 2026 in five sizes. Pick one and every figure below is that file: its shape, where the bytes go, what each download weighs.</p>
-
-      <div class="picker">
-
-        <div class="statgrid">
-          <div><div class="k">Layers</div><div class="v" data-f="layers"></div></div>
-          <div><div class="k">Width</div><div class="v" data-f="hidden"></div></div>
-          <div><div class="k">Vocabulary</div><div class="v" data-f="vocab"></div></div>
-          <div><div class="k">Context</div><div class="v" data-f="ctx"></div></div>
-          <div><div class="k">Weights</div><div class="v" data-f="total"></div></div>
-          <div><div class="k">Read per word</div><div class="v" data-f="active"></div></div>
-        </div>
-
-        <div class="split">
-
-          <div class="panel">
-            <h3>Where the file goes</h3>
-            <table class="kv">
-              <tbody>
-                <tr><td data-f="lhdr"></td><td data-f="hdrsize"></td></tr>
-                <tr><td data-f="lmeta"></td><td data-f="meta"></td></tr>
-                <tr><td data-f="lindex"></td><td data-f="index"></td></tr>
-                <tr><td data-f="lblob"></td><td data-f="blob"></td></tr>
-                <tr class="tot"><td data-f="q4label"></td><td data-f="q4size"></td></tr>
-              </tbody>
-            </table>
-            <p class="note" data-f="wherenote"></p>
-          </div>
-
-          <div class="panel">
-            <h3>One layer, exactly</h3>
-            <table class="kv">
-              <tbody>
-                <tr><td data-f="lwq"></td><td data-f="wq"></td></tr>
-                <tr><td data-f="lwk"></td><td data-f="wk"></td></tr>
-                <tr><td data-f="lwv"></td><td data-f="wv"></td></tr>
-                <tr><td data-f="lwo"></td><td data-f="wo"></td></tr>
-                <tr><td data-f="ffnlabel"></td><td data-f="wffn"></td></tr>
-                <tr class="tot"><td>per layer</td><td data-f="wlayer"></td></tr>
-              </tbody>
-            </table>
-            <p class="note">Times <b data-f="layersshort"></b> layers, plus a <b data-f="embed"></b> lookup table for the vocabulary.</p>
-          </div>
-        </div>
-
-        <div class="panel" style="margin-top: var(--s3);">
-          <h3>What the weights are spent on</h3>
-          <div class="stack" data-f="stack"></div>
-          <div class="legend" data-f="legend"></div>
-          <p class="note" data-f="stacknote"></p>
-        </div>
-
-      </div>
-    </section>
 
     <!-- ================= 01 ================= -->
     <section class="step" id="s1">
-      <div class="eyebrow"><span class="n">01</span><span>Open the file</span></div>
+      <div class="eyebrow"><span class="n">01</span><span>One file</span></div>
       <h2>Everything in one place</h2>
       <p>Models used to ship as a folder: config here, vocabulary there, weights split across numbered files, plus a script to glue it together. GGUF puts all of it in <b>one file that describes itself</b>.</p>
       <p>Open it, read the first four bytes — <code>GGUF</code> — and you know what you have.</p>
@@ -975,8 +935,8 @@ table{border-collapse:collapse}
 
     <!-- ================= 02 ================= -->
     <section class="step" id="s2">
-      <div class="eyebrow"><span class="n">02</span><span>Read the spec</span></div>
-      <h2>A spec sheet at the front</h2>
+      <div class="eyebrow"><span class="n">02</span><span>The label at the front</span></div>
+      <h2>A label at the front</h2>
       <p>Next comes a list of key–value pairs — a few kilobytes describing the model's shape and how to turn text into numbers. The program reads this and now knows <b>what to build</b>.</p>
 
       <figure class="rise">
@@ -1004,12 +964,7 @@ table{border-collapse:collapse}
         </svg>
         <figcaption>Nothing is hardcoded in the program. <b>Change the file, change the model</b> — the same binary handles both.</figcaption>
       </figure>
-    </section>
-
-    <!-- ================= 03 ================= -->
-    <section class="step" id="s3">
-      <div class="eyebrow"><span class="n">03</span><span>Read the index</span></div>
-      <h2>Then a table of contents</h2>
+    
       <p>After the settings comes a directory: every table of numbers by name, its size, and <b>the exact byte where it starts</b>. Think of a zip file's central directory.</p>
 
       <figure class="rise">
@@ -1037,11 +992,27 @@ table{border-collapse:collapse}
         </svg>
         <figcaption>Because everything is at a known offset, finding a table is <b>arithmetic, not searching</b>.</figcaption>
       </figure>
+    
+      <div class="panel">
+            <h3>Where the file goes</h3>
+            <table class="kv">
+              <tbody>
+                <tr><td data-f="lhdr"></td><td data-f="hdrsize"></td></tr>
+                <tr><td data-f="lmeta"></td><td data-f="meta"></td></tr>
+                <tr><td data-f="lindex"></td><td data-f="index"></td></tr>
+                <tr><td data-f="lblob"></td><td data-f="blob"></td></tr>
+                <tr class="tot"><td data-f="q4label"></td><td data-f="q4size"></td></tr>
+              </tbody>
+            </table>
+            <p class="note" data-f="wherenote"></p>
+          </div>
     </section>
+
+    <!-- ================= 03 ================= -->
 
     <!-- ================= 04 ================= -->
     <section class="step" id="s4">
-      <div class="eyebrow"><span class="n">04</span><span>Map, don't load</span></div>
+      <div class="eyebrow"><span class="n">03</span><span>Mapped, not loaded</span></div>
       <h2>The file is never really read</h2>
       <p>Here's the part that surprises people. The program doesn't copy <b data-f="mmSize"></b> into memory. It calls <code>mmap</code> — <b>the file gets an address range, and pages arrive only when touched</b>.</p>
       <p>The bytes on disk are already in the exact layout the math wants, so there's no conversion step. Nothing to parse, nothing to rearrange.</p>
@@ -1089,7 +1060,7 @@ table{border-collapse:collapse}
 
     <!-- ================= 05 ================= -->
     <section class="step" id="s5">
-      <div class="eyebrow"><span class="n">05</span><span>Packed numbers</span></div>
+      <div class="eyebrow"><span class="n">04</span><span>Packed small</span></div>
       <h2>Why the file fits at all</h2>
       <p>The weights aren't stored as normal floating-point numbers. They're <b>rounded onto a grid of 16 steps and stored as 4 bits</b> — half a byte each.</p>
       <p>Rounding on its own would be too crude. So the numbers are handled in <b>groups of 32</b>, and each group stores its own step size. A group of small numbers gets a fine grid, a group of large ones gets a coarse grid.</p>
@@ -1161,39 +1132,7 @@ table{border-collapse:collapse}
         <figcaption data-f="qzcap"></figcaption>
       </figure>
 
-      <p>Not everything gets squeezed equally. A few tables are more sensitive than the rest, so they're kept at higher precision — the file mixes formats table by table.</p>
-
-      <figure class="rise">
-        <svg viewBox="0 0 720 190" role="img" aria-label="Layer stack showing most tables at four bits and a few kept at higher precision.">
-          <text class="t-sm t-sig" x="0" y="14">word lookup table</text>
-          <rect class="bx-brs" x="180" y="2" width="540" height="22" rx="2"/>
-          <text class="t-lbl t-brs" x="450" y="18" text-anchor="middle">higher precision — errors here spread everywhere</text>
-
-          <text class="t-sm" x="0" y="48">layer 1</text>
-          <rect class="bx-sig" x="180" y="34" width="540" height="18" rx="2"/>
-          <text class="t-sm" x="0" y="72">layer 2</text>
-          <rect class="bx-sig" x="180" y="58" width="540" height="18" rx="2"/>
-          <text class="t-sm" x="0" y="96">…</text>
-          <rect class="bx-sig" x="180" y="82" width="540" height="18" rx="2"/>
-          <text class="t-sm" x="0" y="120">layer 32</text>
-          <rect class="bx-sig" x="180" y="106" width="540" height="18" rx="2"/>
-          <text class="t-lbl t-sig" x="450" y="119" text-anchor="middle">4 bits · the bulk of the file</text>
-
-          <text class="t-sm t-brs" x="0" y="150">output layer</text>
-          <rect class="bx-brs" x="180" y="136" width="540" height="22" rx="2"/>
-          <text class="t-lbl t-brs" x="450" y="152" text-anchor="middle">higher precision — this one picks the actual word</text>
-
-          <line class="ln" x1="0" y1="170" x2="720" y2="170"/>
-          <text class="t-sm" x="0" y="186">the names you see — Q4_K_M, Q5_K_M — are just recipes for which tables get which treatment</text>
-        </svg>
-        <figcaption>That's why a "4-bit" model averages closer to <b>4.8 bits per number</b> in practice.</figcaption>
-      </figure>
-    </section>
-
-    <!-- ================= 06 ================= -->
-    <section class="step" id="s6">
-      <div class="eyebrow"><span class="n">06</span><span>Never unpack</span></div>
-      <h2>The packed numbers stay packed</h2>
+    
       <p>The obvious approach would be to unpack a table back to real numbers, then multiply. That would throw away the entire benefit.</p>
       <p>Instead the incoming data gets packed too, and the multiply happens <b>directly on the small integers</b>. One correction at the end restores the scale.</p>
 
@@ -1239,59 +1178,16 @@ table{border-collapse:collapse}
         </svg>
         <figcaption>Only a handful of numbers are ever expanded at once. <b>The full-size version of the model never exists in memory.</b></figcaption>
       </figure>
+    
     </section>
+
+    <!-- ================= 06 ================= -->
 
     <!-- ================= 07 ================= -->
-    <section class="step" id="s7">
-      <div class="eyebrow"><span class="n">07</span><span>Split CPU / GPU</span></div>
-      <h2>Put what fits on the GPU</h2>
-      <p>The layers are independent chunks at known offsets, so you can hand the first N to the GPU and leave the rest on the CPU. <b>You pick N; it's usually one flag.</b></p>
-
-      <figure class="rise">
-        <svg viewBox="0 0 720 208" role="img" aria-label="Layers 1 to 24 on the GPU, layers 25 to 32 on the CPU, with a single handoff between them.">
-          <rect class="bx-sig" x="0" y="10" width="440" height="88" rx="3"/>
-          <text class="t-sm t-sig" x="16" y="30">GPU — as many layers as VRAM holds</text>
-          <g>
-            <rect class="bx-sig" x="16" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="50" y="42" width="30" height="40" rx="2"/>
-            <rect class="bx-sig" x="84" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="118" y="42" width="30" height="40" rx="2"/>
-            <rect class="bx-sig" x="152" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="186" y="42" width="30" height="40" rx="2"/>
-            <rect class="bx-sig" x="220" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="254" y="42" width="30" height="40" rx="2"/>
-            <rect class="bx-sig" x="288" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="322" y="42" width="30" height="40" rx="2"/>
-            <rect class="bx-sig" x="356" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="390" y="42" width="30" height="40" rx="2"/>
-          </g>
-          <text class="t-sm" x="220" y="94" text-anchor="middle">layers 1 – 24</text>
-
-          <path class="ln-brs" d="M 444 54 L 486 54 M 478 49 L 486 54 L 478 59"/>
-          <text class="t-sm t-brs" x="465" y="42" text-anchor="middle">one</text>
-          <text class="t-sm t-brs" x="465" y="76" text-anchor="middle">handoff</text>
-
-          <rect class="bx" x="490" y="10" width="230" height="88" rx="3"/>
-          <text class="t-sm" x="506" y="30">CPU — the leftovers</text>
-          <rect class="bx" x="506" y="42" width="30" height="40" rx="2"/><rect class="bx" x="540" y="42" width="30" height="40" rx="2"/>
-          <rect class="bx" x="574" y="42" width="30" height="40" rx="2"/><rect class="bx" x="608" y="42" width="30" height="40" rx="2"/>
-          <rect class="bx" x="642" y="42" width="30" height="40" rx="2"/><rect class="bx" x="676" y="42" width="30" height="40" rx="2"/>
-          <text class="t-sm" x="605" y="94" text-anchor="middle">layers 25 – 32</text>
-
-          <line class="ln" x1="0" y1="126" x2="720" y2="126"/>
-          <text class="t-sm t-ink" x="0" y="148">all on GPU</text>
-          <rect class="bx-sig" x="150" y="136" width="480" height="14" rx="2"/>
-          <text class="t-lbl t-sig" x="640" y="148">fast</text>
-
-          <text class="t-sm t-ink" x="0" y="174">most on GPU</text>
-          <rect class="bx-sig" x="150" y="162" width="200" height="14" rx="2"/>
-          <text class="t-lbl" x="360" y="174">workable</text>
-
-          <text class="t-sm t-ink" x="0" y="200">none on GPU</text>
-          <rect class="bx" x="150" y="188" width="46" height="14" rx="2"/>
-          <text class="t-lbl" x="206" y="200">slow, but it runs</text>
-        </svg>
-        <figcaption>Speed falls off sharply once even a few layers spill to the CPU — <b>the slowest part sets the pace</b>.</figcaption>
-      </figure>
-    </section>
 
     <!-- ================= 08 ================= -->
     <section class="step" id="s8">
-      <div class="eyebrow"><span class="n">08</span><span>Run it</span></div>
+      <div class="eyebrow"><span class="n">05</span><span>Running it</span></div>
       <h2>Your prompt, then one word at a time</h2>
       <p>Two different jobs. Your prompt goes through <b>all at once</b> — that's a big batch of multiplications, and it's quick. Then the model produces output <b>one word per full pass</b>, and each pass has to wait for the one before it.</p>
 
@@ -1336,12 +1232,8 @@ table{border-collapse:collapse}
       </figure>
 
       <div class="take"><span>Why</span><span data-f="kvnote"></span></div>
-    </section>
-
-    <!-- ================= 09 ================= -->
-    <section class="step" id="s9">
-      <div class="eyebrow"><span class="n">09</span><span>Why it's fast</span></div>
-      <h2>It's a bandwidth problem</h2>
+      <p style="margin-top:var(--s3)">Layers are independent blocks at known offsets, so a runtime can hand the first <b>N</b> to a GPU and leave the rest on the CPU. That is one flag, and it is the single biggest lever on speed.</p>
+    
       <p>Every word means reading <b>every weight in the model, once</b>. So the speed limit isn't how fast your chip multiplies — it's how fast it can pull bytes out of memory.</p>
       <p>Cut the bytes by four and you get roughly four times the words per second. That's the whole reason the packing exists.</p>
 
@@ -1372,36 +1264,18 @@ table{border-collapse:collapse}
       </figure>
 
       <div class="take"><span>Rule</span><span>If the model fits in your fastest memory, it runs well. If it spills, it crawls. That single fact explains most of what you'll read about picking a model size.</span></div>
+    
     </section>
+
+    <!-- ================= 09 ================= -->
 
     <!-- ================= CHEAT SHEET ================= -->
-    <section class="step" id="sheet">
-      <div class="eyebrow"><span class="n">↓</span><span>Filenames, decoded</span></div>
-      <h2>What the suffixes mean</h2>
-      <p>Downloads come with names like <code>model-Q4_K_M.gguf</code>. The suffix is just the packing recipe.</p>
-
-      <div class="sheet-wrap">
-        <table class="sheet">
-          <thead>
-            <tr><th>Suffix</th><th>In plain terms</th><th>Size of a 16 GB model</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>Q8_0</td><td>Barely squeezed. No visible quality loss, little to gain.</td><td>8.5 GB</td></tr>
-            <tr><td>Q6_K</td><td>Safe. Use if it fits comfortably.</td><td>6.6 GB</td></tr>
-            <tr><td>Q5_K_M</td><td>Slightly better than Q4, slightly bigger.</td><td>5.7 GB</td></tr>
-            <tr><td>Q4_K_M</td><td><b>The default choice.</b> Best size-to-quality trade.</td><td>4.9 GB</td></tr>
-            <tr><td>Q3_K_M</td><td>Noticeably rougher. Only when memory is tight.</td><td>3.8 GB</td></tr>
-            <tr><td>IQ2 / Q2_K</td><td>Last resort. The model starts making mistakes.</td><td>2.9 GB</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="take"><span>Short</span><span>Take the largest one that fits entirely in your GPU memory, or in RAM if you have no GPU. Nine times out of ten that's Q4_K_M.</span></div>
-    </section>
 
 
+    <details class="deep" id="deep">
+      <summary><span class="dlabel">Optional</span><span class="dtitle">Look inside a real file, byte by byte</span><span class="dhint">the whole thing taken apart — 2 573 tensors, every offset</span></summary>
     <!-- ================= PART TWO ================= -->
-    <section class="partbreak p2" id="part2">
+    <section class="p2" id="part2">
       <div class="plabel">Part two</div>
       <h2>Inside two real files</h2>
       <p class="lede">Everything above is how the format works. This is what is actually
@@ -1576,6 +1450,8 @@ table{border-collapse:collapse}
   </div>
 </section>
 
+
+    </details>
 
     <footer>
       GGUF · the file format behind llama.cpp, Ollama and LM Studio — one file, memory-mapped, packed to 4 bits, read once per word.<br>
@@ -2279,40 +2155,7 @@ window.__files = F;
         : ("Estimated: this variant was not downloaded, so the index is derived from its layer " +
            "count and the metadata is taken from the 12B file — the whole family shares one tokenizer."));
 
-      if (d.rows) {
-        ["q", "k", "v", "o"].forEach(function (slot, i) {
-          set("lw" + slot, d.rows[i] ? d.rows[i][0] : "");
-          set("w" + slot, d.rows[i] ? P(d.rows[i][1]) : "");
-        });
-        set("ffnlabel", ""); set("wffn", "");
-      } else {
-        set("lwq", "question / Q"); set("lwk", "key / K");
-        set("lwv", "value / V"); set("lwo", "output / O");
-        set("wq", P(d.qd)); set("wk", P(d.kd)); set("wv", P(d.kd)); set("wo", P(d.od));
-        set("ffnlabel", m.experts ? m.experts + " experts + shared" : "feed-forward (3 tables)");
-        set("wffn", P(d.ffnTotal));
-      }
-      set("wlayer", P(d.layer));
-      set("layersshort", m.L);
-      set("embed", Pshort(d.embed));
 
-      var sum = d.segs.reduce(function (a, s) { return a + s.v; }, 0);
-      set("stack", d.segs.map(function (s, i) {
-        return '<span style="width:' + (s.v / sum * 100).toFixed(2) +
-               '%;background:' + TINT[i] + ';opacity:' + FADE[i] + '"></span>';
-      }).join(""));
-      set("legend", d.segs.map(function (s, i) {
-        return '<span><i style="background:' + TINT[i] + ';opacity:' + FADE[i] + '"></i>' +
-               s.n + ' <b>' + (s.v / sum * 100).toFixed(0) + '%</b></span>';
-      }).join(""));
-      set("stacknote", m.experts
-        ? "Nearly all of the file is experts — but only <b>" + m.topk + " of " + m.experts +
-          "</b> run for any given word, which is why a " + (m.total / 1e9).toFixed(0) +
-          "-billion-weight file reads like a " + (m.active / 1e9).toFixed(1) + "-billion one."
-        : (d.ple
-          ? "The per-layer embedding table is <b>" + (d.ple / sum * 100).toFixed(0) +
-            "%</b> of the weights, but only one row of it is read per word — that's the trick that makes an 8&nbsp;B file behave like a 4.5&nbsp;B one."
-          : "Feed-forward dominates every dense model. <b>Attention is the famous part; the plumbing around it is the expensive part.</b>"));
 
       set("q4label", (m.reference || "Q4_K_M") + " download");
 
