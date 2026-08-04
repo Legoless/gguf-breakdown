@@ -461,6 +461,17 @@
     color:var(--paper);border:1px solid var(--signal);border-radius:3px;
     padding:8px 12px;cursor:pointer;line-height:1}
 
+  .xspart{cursor:pointer}
+  .xspart .xsbox{transition:fill .16s, stroke .16s}
+  .xspart:hover .xsbox{fill:var(--signal);stroke:var(--signal)}
+  .xspart:hover text{fill:var(--paper)}
+  .xspart:hover .t-sm{fill:var(--signal)}
+  .xspart:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  .xsnum{font-family:var(--f-mono);font-size:9px;fill:var(--muted)}
+  .xspart:hover .xsnum{fill:var(--paper)}
+  .xshint{fill:var(--muted);opacity:.75}
+  .step:target h2, .step.flash h2{color:var(--signal)}
+
   ul.plain{max-width:var(--measure);margin:0 0 var(--s2);padding-left:1.1rem;
     list-style:none}
   ul.plain li{position:relative;margin-bottom:7px;text-wrap:pretty}
@@ -838,8 +849,7 @@
       that, the <b>numbers</b>: every table of weights, back to back, and nothing else.</p>
       <p>The label is under a thousandth of the file. All the rest is the model itself.</p>
       <figure class="rise fig-lead">
-        <svg viewBox="0 0 720 210" role="img" aria-label="Cross-section of a GGUF file: a small header, a metadata section, a tensor index, and a very large block of weight data.">
-          <!-- ruler -->
+        <svg viewBox="0 0 720 216" role="img" aria-label="Cross-section of a GGUF file, in file order: header, metadata, tensor index, then the weights. Each part links to the step that explains it.">
           <g class="ln">
             <line x1="0" y1="46" x2="720" y2="46"/>
             <line x1="0" y1="40" x2="0" y2="46"/>
@@ -851,38 +861,44 @@
           <text class="t-sm" x="0" y="32">byte 0</text>
           <text class="t-sm" x="719" y="32" text-anchor="end" data-f="xsEnd"></text>
 
-          <!-- segments -->
-          <rect class="bx-sig" x="0"   y="60" width="44"  height="62" rx="2"/>
-          <rect class="bx-sig" x="46"  y="60" width="164" height="62" rx="2"/>
-          <rect class="bx-sig" x="212" y="60" width="102" height="62" rx="2"/>
-          <rect class="bx-brs" x="316" y="60" width="403" height="62" rx="2"/>
-
-          <text class="t-lbl t-ink" x="22"  y="96" text-anchor="middle">·</text>
-          <text class="t-lbl t-ink" x="128" y="90" text-anchor="middle">settings</text>
-          <text class="t-lbl"       x="128" y="106" text-anchor="middle" data-f="xsVocab"></text>
-          <text class="t-lbl t-ink" x="263" y="96" text-anchor="middle">index</text>
-          <text class="t-lbl t-ink" x="517" y="90" text-anchor="middle">the numbers</text>
-          <text class="t-lbl"       x="517" y="106" text-anchor="middle">every table, back to back</text>
-
-          <!-- labels below -->
-          <g class="ln">
-            <line x1="22"  y1="126" x2="22"  y2="142"/>
-            <line x1="128" y1="126" x2="128" y2="142"/>
-            <line x1="263" y1="126" x2="263" y2="142"/>
-            <line x1="517" y1="126" x2="517" y2="142"/>
-          </g>
-          <text class="t-sm t-sig" x="22"  y="158" text-anchor="middle">header</text>
-          <text class="t-sm t-sig" x="128" y="158" text-anchor="middle">metadata</text>
-          <text class="t-sm t-sig" x="263" y="158" text-anchor="middle">index</text>
-          <text class="t-sm t-brs" x="517" y="158" text-anchor="middle">weights</text>
-
-          <text class="t-lbl" x="22"  y="176" text-anchor="middle" data-f="xsHdr"></text>
-          <text class="t-lbl" x="128" y="176" text-anchor="middle" data-f="xsMeta"></text>
-          <text class="t-lbl" x="263" y="176" text-anchor="middle" data-f="xsIdx"></text>
-          <text class="t-lbl t-ink" x="517" y="176" text-anchor="middle" data-f="xsData"></text>
+          <a href="#s1" class="xspart" aria-label="header — jump to the step that explains it">
+            <rect class="bx-sig xsbox" x="0" y="60" width="44" height="62" rx="2"/>
+            <text class="t-lbl t-ink" x="22" y="96" text-anchor="middle">·</text>
+            <text class="xsnum" x="7" y="74">1</text>
+            <line class="ln xstick" x1="22" y1="126" x2="22" y2="142"/>
+            <text class="t-sm t-sig" x="22" y="158" text-anchor="middle">header</text>
+            <text class="t-lbl" x="22" y="176" text-anchor="middle" data-f="xsHdr"></text>
+          </a>
+          <a href="#s2" class="xspart" aria-label="metadata — jump to the step that explains it">
+            <rect class="bx-sig xsbox" x="46" y="60" width="164" height="62" rx="2"/>
+            <text class="t-lbl t-ink" x="128" y="90" text-anchor="middle">settings</text>
+            <text class="t-lbl" x="128" y="106" text-anchor="middle" data-f="xsVocab"></text>
+            <text class="xsnum" x="53" y="74">2</text>
+            <line class="ln xstick" x1="128" y1="126" x2="128" y2="142"/>
+            <text class="t-sm t-sig" x="128" y="158" text-anchor="middle">metadata</text>
+            <text class="t-lbl" x="128" y="176" text-anchor="middle" data-f="xsMeta"></text>
+          </a>
+          <a href="#s2" class="xspart" aria-label="index — jump to the step that explains it">
+            <rect class="bx-sig xsbox" x="212" y="60" width="102" height="62" rx="2"/>
+            <text class="t-lbl t-ink" x="263" y="98" text-anchor="middle">index</text>
+            <text class="xsnum" x="219" y="74">3</text>
+            <line class="ln xstick" x1="263" y1="126" x2="263" y2="142"/>
+            <text class="t-sm t-sig" x="263" y="158" text-anchor="middle">index</text>
+            <text class="t-lbl" x="263" y="176" text-anchor="middle" data-f="xsIdx"></text>
+          </a>
+          <a href="#s4" class="xspart" aria-label="weights — jump to the step that explains it">
+            <rect class="bx-brs xsbox" x="316" y="60" width="403" height="62" rx="2"/>
+            <text class="t-lbl t-ink" x="517" y="90" text-anchor="middle">the numbers</text>
+            <text class="t-lbl" x="517" y="106" text-anchor="middle">every table, back to back</text>
+            <text class="xsnum" x="323" y="74">4</text>
+            <line class="ln xstick" x1="517" y1="126" x2="517" y2="142"/>
+            <text class="t-sm t-brs" x="517" y="158" text-anchor="middle">weights</text>
+            <text class="t-lbl t-ink" x="517" y="176" text-anchor="middle" data-f="xsData"></text>
+          </a>
 
           <line class="ln-dash" x1="316" y1="188" x2="719" y2="188"/>
           <text class="t-sm" x="517" y="204" text-anchor="middle" data-f="xsPct"></text>
+          <text class="t-sm xshint" x="0" y="204">in file order · click a part</text>
         </svg>
         <figcaption data-f="xscap"></figcaption>
       </figure>
@@ -2259,6 +2275,18 @@ window.__files = F;
   select(NAME[start] ? start : "12b");
 })();
 
+/* ---- cross-section links flash their destination ---- */
+(function(){
+  document.querySelectorAll("a.xspart").forEach(function(a){
+    a.addEventListener("click", function(){
+      var el = document.querySelector(a.getAttribute("href"));
+      if(!el) return;
+      el.classList.add("flash");
+      setTimeout(function(){ el.classList.remove("flash"); }, 1400);
+    });
+  });
+})();
+
 /* ---- glossary panel ---- */
 (function(){
   var panel=document.getElementById("gpanel"), scrim=document.getElementById("gscrim"),
@@ -2306,7 +2334,7 @@ window.__files = F;
         if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
         var p=n.parentElement;
         while(p&&p!==document.body){
-          if(/^(CODE|PRE|A|BUTTON|SVG|H1|H2|TEXT)$/.test(p.tagName)||p.classList.contains("term"))
+          if(/^(CODE|PRE|A|BUTTON|SVG|H1|H2|TEXT|TSPAN|OPTION|SUMMARY)$/i.test(p.tagName)||p.classList.contains("term"))
             return NodeFilter.FILTER_REJECT;
           p=p.parentElement;
         }
