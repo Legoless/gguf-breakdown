@@ -2013,7 +2013,7 @@ window.__files = F;
 
     var BANDWIDTH = 400; /* GB/s — a fast consumer GPU, order of magnitude */
 
-    function group(n) { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
+    function group(n) { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f"); }
     function P(n) {
       if (n >= 1e9) return (n / 1e9).toFixed(2) + " <span class='u'>B</span>";
       if (n >= 1e6) return (n / 1e6).toFixed(1) + " <span class='u'>M</span>";
@@ -2097,8 +2097,8 @@ window.__files = F;
       var m = MODELS[id], d = derive(m);
 
       set("layers", m.L);
-      set("hidden", group(m.H));
-      set("vocab", (m.vocab / 1024) + " <small>K</small>");
+      set("hidden", group(m.H) + " <small>per token</small>");
+      set("vocab", (m.vocab / 1024) + " <small>K tokens</small>");
       set("ctx", (m.ctx >= 1048576 ? (m.ctx / 1048576) + " <small>M words</small>"
                                      : (m.ctx / 1024) + " <small>K words</small>"));
       var count = function (n) {
@@ -2111,8 +2111,8 @@ window.__files = F;
       var ex = m.exact, nsh = ex && ex.shards > 1 ? ex.shards : 0;
       var per = nsh ? " <span class='u'>× " + nsh + "</span>" : "";
       set("msArch", m.arch || "gemma4");
-      set("msLayers", m.L);
-      set("msWidth", group(m.H));
+      set("msLayers", m.L + " deep");
+      set("msWidth", group(m.H) + " numbers");
       set("msCtx", (m.ctx >= 1048576 ? (m.ctx / 1048576) + "M" : (m.ctx / 1024) + "K") + " words");
       set("msVocab", group(m.vocab) + " entries");
 
