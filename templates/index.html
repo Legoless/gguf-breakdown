@@ -822,12 +822,12 @@
       <select id="modelselect" aria-label="Model">
         <optgroup label="Google · Gemma 4">
           <option value="e4b">Gemma 4 · E4B</option>
-          <option value="12b" selected>Gemma 4 · 12B</option>
+          <option value="12b">Gemma 4 · 12B</option>
           <option value="31b">Gemma 4 · 31B</option>
           <option value="a4b">Gemma 4 · 26B A4B</option>
         </optgroup>
         <optgroup label="Moonshot">
-          <option value="k3">Kimi K3</option>
+          <option value="k3" selected>Kimi K3</option>
         </optgroup>
       </select>
     </span>
@@ -1533,7 +1533,7 @@
 <script>(function(){
 
 var F = __DATA__;
-var cur = "gemma";
+var cur = "k3";
 
 function n(x){return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g," ");}
 function sz(b){
@@ -2433,7 +2433,7 @@ window.__files = F;
   });
 
   var start = (location.hash || "").replace("#", "");
-  select(NAME[start] ? start : "12b");
+  select(NAME[start] ? start : "k3");
 })();
 
 /* ---- cross-section links flash their destination ---- */
