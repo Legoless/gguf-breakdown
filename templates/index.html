@@ -460,50 +460,8 @@
   .nofile button{font-family:var(--f-mono);font-size:11.5px;background:var(--signal);
     color:var(--paper);border:1px solid var(--signal);border-radius:3px;
     padding:8px 12px;cursor:pointer;line-height:1}
+25%{color:var(--brass)}}100%{transform:none;opacity:1}}
 
-  .drill{display:flex;flex-direction:column;gap:8px;margin:var(--s2) 0 var(--s3)}
-  .dhead{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.15em;
-    color:var(--signal);font-weight:400;margin:var(--s3) 0 0;scroll-margin-top:78px}
-  .dhead.flash{animation:dflash 1.4s ease}
-  @keyframes dflash{0%,100%{color:var(--signal)}25%{color:var(--brass)}}
-  .drill.flash .dbar{animation:dpop .5s cubic-bezier(.2,.7,.3,1)}
-  @keyframes dpop{0%{transform:scale(.97);opacity:.4}100%{transform:none;opacity:1}}
-  .dbar.zooming .dseg{transition:width .42s cubic-bezier(.55,0,.35,1),opacity .3s ease}
-  .dbar.zooming .dseg:not(.chosen){opacity:0}
-  @media (prefers-reduced-motion:reduce){
-    .dbar.zooming .dseg{transition:none}
-    .dhead.flash,.drill.flash .dbar{animation:none}
-  }
-  .dcrumb{display:flex;align-items:center;gap:7px;font-family:var(--f-mono);font-size:11px;
-    min-height:18px;flex-wrap:wrap}
-  .dcrumb button{background:none;border:0;padding:0;font:inherit;color:var(--signal);
-    cursor:pointer;text-decoration:underline;text-underline-offset:3px}
-  .dcrumb button:hover{color:var(--ink)}
-  .dcrumb .sep{color:var(--muted);opacity:.6}
-  .dcrumb .here{color:var(--ink)}
-  .druler{display:flex;justify-content:space-between;font-family:var(--f-mono);
-    font-size:10px;color:var(--muted);border-bottom:1px solid var(--rule);padding-bottom:5px}
-
-  .dbar{display:flex;gap:3px;align-items:stretch;min-height:96px}
-  .dseg{flex:none;display:flex;flex-direction:column;gap:0;border:0;padding:0;
-    background:none;font:inherit;text-align:left;color:inherit;min-width:0}
-  .dseg .swatch{height:58px;border-radius:2px;border:1px solid var(--signal);
-    background:var(--signal-dim);display:flex;align-items:center;justify-content:center;
-    padding:0 6px;overflow:hidden;transition:background .16s,border-color .16s}
-  .dseg .sname{font-family:var(--f-mono);font-size:10.5px;color:var(--ink);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .dseg .smeta{padding-top:7px;font-family:var(--f-mono);font-size:10px;color:var(--muted);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .dseg .ssize{color:var(--ink)}
-  .dseg.big .swatch{border-color:var(--brass);background:var(--brass-dim)}
-  .dseg.big .ssize{color:var(--brass)}
-  .dseg.can{cursor:pointer}
-  .dseg.can .swatch::after{content:"▸";margin-left:6px;color:var(--signal);font-size:9px}
-  .dseg.can:hover .swatch{background:var(--signal);border-color:var(--signal)}
-  .dseg.can:hover .sname{color:var(--paper)}
-  .dseg.can.big:hover .swatch{background:var(--brass);border-color:var(--brass)}
-  .dseg:focus-visible{outline:2px solid var(--signal);outline-offset:3px;border-radius:3px}
-  .dnote{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);margin:0}
 
   .xspart{cursor:pointer}
   .xspart .xsbox{transition:fill .16s, stroke .16s}
@@ -944,8 +902,6 @@
 
       <p class="lede">A GGUF file is a language model saved to disk. Five steps is the whole of it — what the file contains, and what a program does with it to produce a word.</p>
 
-
-
       <div class="statgrid">
           <div><div class="k">Layers</div><div class="v" data-f="layers"></div></div>
           <div><div class="k">Width</div><div class="v" data-f="hidden"></div></div>
@@ -953,21 +909,8 @@
           <div><div class="k">Context</div><div class="v" data-f="ctx"></div></div>
           <div><div class="k">Weight count</div><div class="v" data-f="total"></div></div>
           <div><div class="k">Read per word</div><div class="v" data-f="active"></div></div>
-        </div>
-
-
+      </div>
     </header>
-
-    <!-- ================= SELECTOR ================= -->
-
-      <div class="statgrid">
-          <div><div class="k">Layers</div><div class="v" data-f="layers"></div></div>
-          <div><div class="k">Width</div><div class="v" data-f="hidden"></div></div>
-          <div><div class="k">Vocabulary</div><div class="v" data-f="vocab"></div></div>
-          <div><div class="k">Context</div><div class="v" data-f="ctx"></div></div>
-          <div><div class="k">Weight count</div><div class="v" data-f="total"></div></div>
-          <div><div class="k">Read per word</div><div class="v" data-f="active"></div></div>
-        </div>
 
     <!-- ================= 01 ================= -->
     <section class="step" id="s1">
@@ -1084,10 +1027,6 @@
         </svg>
         <figcaption>Quantization is <b>rounding to a grid</b>, with the grid spacing chosen per group so the rounding error stays small.</figcaption>
       </figure>
-
-        <div class="dbar"></div>
-        <p class="dnote"></p>
-      </div>
 
       <p>The arithmetic is not subtle:</p>
 
