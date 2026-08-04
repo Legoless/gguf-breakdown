@@ -437,23 +437,6 @@ table{border-collapse:collapse}
   }
   .note b { color: var(--ink); font-weight: 500; }
 
-  .qlist { display: flex; flex-direction: column; gap: 5px; }
-  .qrow {
-    display: grid;
-    grid-template-columns: minmax(96px, 132px) 1fr 82px;
-    align-items: center;
-    gap: var(--s2);
-    font-family: var(--f-mono);
-    font-size: 12.5px;
-  }
-  .qrow .qn { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .qrow .qs { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .qbar { height: 15px; border-radius: 2px; background: var(--signal-dim); border: 1px solid var(--signal); }
-  .qrow.hot .qn { color: var(--signal); }
-  .qrow.hot .qs { color: var(--signal); }
-  .qrow.hot .qbar { background: var(--signal); border-color: var(--signal); }
-  .qrow.big .qbar { background: var(--brass-dim); border-color: var(--brass); }
-  .qrow.big .qs, .qrow.big .qn { color: var(--brass); }
 
   .stack { display: flex; height: 42px; border-radius: 3px; overflow: hidden; border: 1px solid var(--rule); }
   .stack span { display: block; height: 100%; }
@@ -965,12 +948,6 @@ table{border-collapse:collapse}
           <div class="stack" data-f="stack"></div>
           <div class="legend" data-f="legend"></div>
           <p class="note" data-f="stacknote"></p>
-        </div>
-
-        <div class="panel" style="margin-top: var(--s3);">
-          <h3>Every download, same model</h3>
-          <div class="qlist" data-f="quants"></div>
-          <p class="note" data-f="ladnote"></p>
         </div>
 
       </div>
@@ -2282,22 +2259,7 @@ window.__files = F;
             "%</b> of the weights, but only one row of it is read per word — that's the trick that makes an 8&nbsp;B file behave like a 4.5&nbsp;B one."
           : "Feed-forward dominates every dense model. <b>Attention is the famous part; the plumbing around it is the expensive part.</b>"));
 
-      set("quants", m.q.map(function (r) {
-        var pct = r[1] / m.q[m.q.length - 1][1] * 100;
-        var ref = m.reference || "Q4_K_M";
-        var cls = r[0] === ref ? " hot" : (r[0] === "BF16" ? " big" : "");
-        return '<div class="qrow' + cls + '"><span class="qn">' + r[0] +
-               '</span><span class="qbar" style="width:' + pct.toFixed(1) + '%"></span>' +
-               '<span class="qs">' + (r[1] >= 1000 ? (r[1]/1000).toFixed(2) + ' TB'
-                                                   : r[1].toFixed(2) + ' GB') + '</span></div>';
-      }).join(""));
       set("q4label", (m.reference || "Q4_K_M") + " download");
-      set("ladnote", m.noFullPrecision
-        ? "Real file sizes. <b>" + m.reference + "</b> is the one Moonshot published — everything " +
-          "else in the list is a re-packing of it, and none is larger. It works out to <b>" +
-          d.bpw.toFixed(2) + "</b> bits per weight: 4 for the experts, 16 for the attention left untouched."
-        : "Real file sizes. <b>Q4_K_M</b> works out to about <b>" + d.bpw.toFixed(2) +
-          "</b> bits per weight — not 4, because the sensitive tables keep more.");
 
       /* bandwidth figure */
       var fullB, q4B, cap;
