@@ -1,0 +1,8 @@
+# Cached GGUF headers — large, and regenerable with `python3 tools/extract.py`
+data/raw/
+
+# Tooling / OS noise
+.omc/
+__pycache__/
+*.pyc
+.DS_Store

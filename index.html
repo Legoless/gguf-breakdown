@@ -1,0 +1,2509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How a GGUF model file is loaded and run, and what is actually inside two real ones — Gemma 4 12B and Kimi K3.">
+<meta name="color-scheme" content="light dark">
+<title>GGUF, end to end</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Ctext%20y%3D%27.9em%27%20font-size%3D%2756%27%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E">
+<style>*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+img,svg,video{max-width:100%;height:auto}
+button{font:inherit;color:inherit}
+table{border-collapse:collapse}
+.themetoggle{position:fixed;top:14px;right:14px;z-index:99;
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  background:var(--paper-2);color:var(--muted);border:1px solid var(--rule);
+  border-radius:3px;padding:7px 11px;cursor:pointer;line-height:1;
+  transition:color .18s,border-color .18s}
+.themetoggle:hover{color:var(--ink);border-color:var(--muted)}
+.themetoggle:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+@media print{.themetoggle{display:none}}</style>
+</head>
+<body>
+<style>
+
+  :root {
+    --paper:      #E9EBE7;
+    --paper-2:    #F3F4F1;
+    --ink:        #12171A;
+    --muted:      #68767A;
+    --rule:       #CDD3D0;
+    --signal:     #0F6E7A;
+    --signal-dim: #0F6E7A22;
+    --brass:      #A8801F;
+    --brass-dim:  #A8801F22;
+    --f32:        #8A9A9C;
+    --shadow:     0 1px 2px #12171A0D, 0 8px 24px #12171A08;
+
+    --f-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --f-text: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+
+    --s1: .5rem; --s2: 1rem; --s3: 1.5rem; --s4: 2.5rem; --s5: 4rem; --s6: 6rem;
+    --measure: 63ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #0F1416;
+      --paper-2:    #171E20;
+      --ink:        #DCE3E1;
+      --muted:      #8A9A9C;
+      --rule:       #2A3436;
+      --signal:     #45B7C2;
+      --signal-dim: #45B7C224;
+      --brass:      #D6AA46;
+      --brass-dim:  #D6AA4622;
+    --f32:        #5A6A6C;
+      --shadow:     0 1px 2px #00000059, 0 8px 24px #0000002E;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #0F1416;
+    --paper-2:    #171E20;
+    --ink:        #DCE3E1;
+    --muted:      #8A9A9C;
+    --rule:       #2A3436;
+    --signal:     #45B7C2;
+    --signal-dim: #45B7C224;
+    --brass:      #D6AA46;
+    --brass-dim:  #D6AA4622;
+    --f32:        #5A6A6C;
+    --shadow:     0 1px 2px #00000059, 0 8px 24px #0000002E;
+  }
+  :root[data-theme="light"] {
+    --paper:      #E9EBE7;
+    --paper-2:    #F3F4F1;
+    --ink:        #12171A;
+    --muted:      #68767A;
+    --rule:       #CDD3D0;
+    --signal:     #0F6E7A;
+    --signal-dim: #0F6E7A22;
+    --brass:      #A8801F;
+    --brass-dim:  #A8801F22;
+    --f32:        #8A9A9C;
+    --shadow:     0 1px 2px #12171A0D, 0 8px 24px #12171A08;
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-text);
+    font-size: 17px;
+    line-height: 1.62;
+    margin: 0;
+    overflow-x: hidden;
+  }
+
+  ::selection { background: var(--signal); color: var(--paper); }
+
+  /* ---------- shell ---------- */
+
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 var(--s3); }
+
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--s4);
+    align-items: start;
+  }
+  @media (min-width: 940px) {
+    .cols { grid-template-columns: 190px minmax(0, 1fr); gap: var(--s6); }
+  }
+
+  /* ---------- rail ---------- */
+
+  .rail { display: none; }
+  @media (min-width: 940px) {
+    .rail {
+      display: block;
+      position: sticky;
+      top: var(--s4);
+      font-family: var(--f-mono);
+      font-size: 11.5px;
+      letter-spacing: .04em;
+    }
+  }
+  .rail-title {
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    color: var(--muted);
+    font-size: 10px;
+    padding-bottom: var(--s2);
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: var(--s2);
+  }
+  .rail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .rail-list a {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: var(--s1);
+    padding: 5px 8px 5px 0;
+    color: var(--muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    padding-left: 10px;
+    transition: color .18s, border-color .18s;
+  }
+  .rail-list a:hover { color: var(--ink); }
+  .rail-list a:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 2px; }
+  .rail-list a.on { color: var(--ink); border-left-color: var(--signal); }
+  .rail-list .n { color: var(--signal); font-variant-numeric: tabular-nums; }
+
+  /* ---------- hero ---------- */
+
+  .hero { padding: var(--s5) 0 var(--s4); }
+
+  .hexstrip {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    letter-spacing: .22em;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: var(--s2);
+    margin-bottom: var(--s4);
+  }
+  .hexstrip b { color: var(--signal); font-weight: inherit; }
+
+  h1 {
+    font-family: var(--f-mono);
+    font-weight: 500;
+    font-size: clamp(2.4rem, 7vw, 4.4rem);
+    line-height: 1.02;
+    letter-spacing: -.045em;
+    margin: 0 0 var(--s3);
+    text-wrap: balance;
+  }
+  h1 em { font-style: normal; color: var(--signal); }
+
+  .lede {
+    font-size: clamp(1.06rem, 2.2vw, 1.32rem);
+    line-height: 1.5;
+    color: var(--muted);
+    max-width: 48ch;
+    margin: 0 0 var(--s4);
+    text-wrap: pretty;
+  }
+  .lede strong { color: var(--ink); font-weight: 500; }
+
+  .primer {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: var(--s5);
+  }
+  .primer div { background: var(--paper); padding: var(--s2) var(--s3) var(--s3); }
+  .primer dt {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    color: var(--signal);
+    margin-bottom: 6px;
+  }
+  .primer dd { margin: 0; font-size: 15px; line-height: 1.5; color: var(--muted); }
+  .primer dd b { color: var(--ink); font-weight: 500; }
+
+  /* ---------- steps ---------- */
+
+  .step { padding: var(--s5) 0; border-top: 1px solid var(--rule); scroll-margin-top: var(--s3); }
+  .step:first-of-type { border-top: none; padding-top: 0; }
+
+  .eyebrow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s2);
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .18em;
+    color: var(--muted);
+    margin-bottom: var(--s2);
+  }
+  .eyebrow .n {
+    color: var(--paper);
+    background: var(--signal);
+    padding: 3px 7px;
+    border-radius: 2px;
+    letter-spacing: .08em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  h2 {
+    font-family: var(--f-mono);
+    font-weight: 500;
+    font-size: clamp(1.5rem, 3.4vw, 2.05rem);
+    line-height: 1.14;
+    letter-spacing: -.035em;
+    margin: 0 0 var(--s2);
+    text-wrap: balance;
+  }
+
+  .step p { max-width: var(--measure); margin: 0 0 var(--s2); text-wrap: pretty; }
+  .step p:last-of-type { margin-bottom: 0; }
+  .step p b { font-weight: 600; }
+  .step code {
+    font-family: var(--f-mono);
+    font-size: .87em;
+    background: var(--signal-dim);
+    color: var(--signal);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+
+  /* ---------- figures ---------- */
+
+  figure {
+    margin: var(--s3) 0 var(--s3);
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: var(--s3);
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  figure svg { display: block; width: 100%; height: auto; min-width: 400px; }
+  figcaption {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--muted);
+    margin-top: var(--s2);
+    padding-top: var(--s2);
+    border-top: 1px solid var(--rule);
+    letter-spacing: .01em;
+  }
+  figcaption b { color: var(--ink); font-weight: 500; }
+
+  .fig-lead { margin-top: 0; }
+
+  /* takeaway */
+  .take {
+    display: flex;
+    gap: var(--s2);
+    align-items: flex-start;
+    max-width: var(--measure);
+    margin-top: var(--s3);
+    padding: var(--s2) var(--s3);
+    background: var(--signal-dim);
+    border-left: 2px solid var(--signal);
+    border-radius: 0 3px 3px 0;
+    font-size: 15.5px;
+    line-height: 1.55;
+  }
+  .take span:first-child {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    color: var(--signal);
+    padding-top: 5px;
+    flex: none;
+  }
+
+  /* ---------- svg shared classes ---------- */
+
+  svg text { font-family: var(--f-mono); fill: var(--muted); }
+  .t-lbl  { font-size: 11px; letter-spacing: .02em; }
+  .t-sm   { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; }
+  .t-big  { font-size: 15px; fill: var(--ink); }
+  .t-ink  { fill: var(--ink); }
+  .t-sig  { fill: var(--signal); }
+  .t-brs  { fill: var(--brass); }
+  .bx     { fill: var(--paper); stroke: var(--rule); stroke-width: 1; }
+  .bx-sig { fill: var(--signal-dim); stroke: var(--signal); stroke-width: 1; }
+  .bx-brs { fill: var(--brass-dim); stroke: var(--brass); stroke-width: 1; }
+  .ln     { stroke: var(--rule); stroke-width: 1; fill: none; }
+  .ln-sig { stroke: var(--signal); stroke-width: 1.4; fill: none; }
+  .ln-brs { stroke: var(--brass); stroke-width: 1.4; fill: none; }
+  .ln-dash{ stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; fill: none; opacity: .55; }
+
+  /* ---------- cheat sheet ---------- */
+
+  .sheet { width: 100%; border-collapse: collapse; font-size: 15px; margin-top: var(--s3); }
+  .sheet th, .sheet td { text-align: left; padding: 11px 14px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .sheet th {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .sheet td:first-child { font-family: var(--f-mono); color: var(--signal); white-space: nowrap; padding-right: var(--s3); font-size: 14px; }
+  .sheet td:nth-child(2) { color: var(--muted); }
+  .sheet-wrap { overflow-x: auto; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    margin-top: var(--s5);
+    padding: var(--s3) 0 var(--s5);
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: var(--muted);
+  }
+
+  /* ---------- model selector ---------- */
+
+  .picker { margin: var(--s3) 0 var(--s3); }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0;
+    margin: 0 0 var(--s3);
+    list-style: none;
+  }
+
+  .statgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: var(--s3);
+  }
+  .statgrid div { background: var(--paper-2); padding: 11px 14px 13px; }
+  .statgrid .k {
+    font-family: var(--f-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .13em;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+  .statgrid .v {
+    font-family: var(--f-mono);
+    font-size: 17px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.02em;
+  }
+  .statgrid .v small { font-size: 11px; color: var(--muted); letter-spacing: 0; }
+
+  .split { display: grid; grid-template-columns: 1fr; gap: var(--s3); }
+  @media (min-width: 720px) { .split { grid-template-columns: 1fr 1fr; } }
+
+  .panel {
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: var(--s3);
+    box-shadow: var(--shadow);
+  }
+  .panel h3 {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .16em;
+    color: var(--signal);
+    font-weight: 400;
+    margin: 0 0 var(--s2);
+  }
+
+  .kv { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 12.5px; }
+  .kv td { padding: 6px 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+  .kv tr:last-child td { border-bottom: none; }
+  .kv td:first-child { color: var(--muted); padding-right: var(--s2); }
+  .kv td:last-child { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kv td .u { color: var(--muted); font-size: 11px; }
+  .kv tr.tot td { border-top: 1px solid var(--muted); border-bottom: none; padding-top: 9px; }
+  .kv tr.tot td:first-child { color: var(--ink); }
+  .kv tr.tot td:last-child { color: var(--signal); }
+
+  .note {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--muted);
+    margin-top: var(--s2);
+    padding-top: var(--s2);
+    border-top: 1px solid var(--rule);
+  }
+  .note b { color: var(--ink); font-weight: 500; }
+
+  .qlist { display: flex; flex-direction: column; gap: 5px; }
+  .qrow {
+    display: grid;
+    grid-template-columns: 92px 1fr 74px;
+    align-items: center;
+    gap: var(--s2);
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+  }
+  .qrow .qn { color: var(--ink); }
+  .qrow .qs { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .qbar { height: 15px; border-radius: 2px; background: var(--signal-dim); border: 1px solid var(--signal); }
+  .qrow.hot .qn { color: var(--signal); }
+  .qrow.hot .qs { color: var(--signal); }
+  .qrow.hot .qbar { background: var(--signal); border-color: var(--signal); }
+  .qrow.big .qbar { background: var(--brass-dim); border-color: var(--brass); }
+  .qrow.big .qs, .qrow.big .qn { color: var(--brass); }
+
+  .stack { display: flex; height: 42px; border-radius: 3px; overflow: hidden; border: 1px solid var(--rule); }
+  .stack span { display: block; height: 100%; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2) var(--s3);
+    margin-top: var(--s2);
+    font-family: var(--f-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: baseline; }
+  .legend b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  /* ---------- motion ---------- */
+
+  .rise { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.3,1); }
+  .rise.in { opacity: 1; transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rise { opacity: 1; transform: none; transition: none; }
+    * { animation: none !important; }
+    html { scroll-behavior: auto; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+
+  /* ---------- sticky model bar ---------- */
+  .modelbar{position:sticky;top:0;z-index:50;background:var(--paper);
+    border-bottom:1px solid var(--rule)}
+  .mbinner{max-width:1140px;margin:0 auto;padding:10px var(--s3);
+    display:flex;align-items:center;gap:var(--s2);overflow-x:auto}
+  .mblabel{font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;
+    letter-spacing:.18em;color:var(--muted);flex:none}
+  .mbtabs{display:flex;gap:5px;flex:1}
+  .mbtabs button{font-family:var(--f-mono);font-size:11.5px;white-space:nowrap;
+    color:var(--muted);background:none;border:1px solid var(--rule);border-radius:3px;
+    padding:7px 11px;cursor:pointer;line-height:1;
+    transition:color .16s,border-color .16s,background .16s}
+  .mbtabs button:hover{color:var(--ink);border-color:var(--muted)}
+  .mbtabs button:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  .mbtabs button[aria-selected="true"]{background:var(--signal);border-color:var(--signal);
+    color:var(--paper)}
+  .mbtabs .fam{opacity:.6;margin-right:5px}
+  .mbtabs button[aria-selected="true"] .fam{opacity:.8}
+
+  /* no byte-level teardown for this variant */
+  .nofile{max-width:var(--measure);margin-top:var(--s3);padding:var(--s3);
+    border:1px dashed var(--rule);border-radius:4px;background:var(--paper-2)}
+  .nofile p{margin:0 0 var(--s2);color:var(--muted)}
+  .nofile p:last-child{margin:0}
+  .nofile b{color:var(--ink);font-weight:500}
+  .nofile button{font-family:var(--f-mono);font-size:11.5px;background:var(--signal);
+    color:var(--paper);border:1px solid var(--signal);border-radius:3px;
+    padding:8px 12px;cursor:pointer;line-height:1}
+
+  /* ---------- part break ---------- */
+  .partbreak{padding:var(--s5) 0 0;border-top:2px solid var(--rule);margin-top:var(--s5)}
+  .partbreak .plabel{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;
+    letter-spacing:.2em;color:var(--brass);margin-bottom:var(--s2)}
+
+  /* ---------- glossary side panel ---------- */
+  .gopen{position:fixed;right:16px;bottom:16px;z-index:60;font-family:var(--f-mono);
+    font-size:11px;letter-spacing:.1em;text-transform:uppercase;background:var(--signal);
+    color:var(--paper);border:1px solid var(--signal);border-radius:3px;padding:11px 15px;
+    cursor:pointer;line-height:1;box-shadow:var(--shadow)}
+  .gopen:hover{filter:brightness(1.08)}
+  .gopen:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  .gscrim{position:fixed;inset:0;background:#0008;z-index:70;opacity:0;pointer-events:none;
+    transition:opacity .22s}
+  .gscrim.on{opacity:1;pointer-events:auto}
+
+  .gpanel{position:fixed;top:0;right:0;bottom:0;width:min(420px,92vw);z-index:80;
+    background:var(--paper);border-left:1px solid var(--rule);overflow-y:auto;
+    transform:translateX(100%);transition:transform .26s cubic-bezier(.2,.7,.3,1);
+    padding:var(--s3) var(--s3) var(--s5)}
+  .gpanel.on{transform:none}
+  @media (prefers-reduced-motion:reduce){.gpanel{transition:none}.gscrim{transition:none}}
+  .ghead{display:flex;justify-content:space-between;align-items:baseline;
+    position:sticky;top:calc(var(--s3) * -1);background:var(--paper);
+    padding:var(--s3) 0 var(--s2);margin-top:calc(var(--s3) * -1);z-index:2;
+    border-bottom:1px solid var(--rule)}
+  .ghead h3{font-family:var(--f-mono);font-size:11px;text-transform:uppercase;
+    letter-spacing:.16em;color:var(--signal);margin:0;font-weight:400}
+  .gclose{background:none;border:0;font-family:var(--f-mono);font-size:16px;
+    color:var(--muted);cursor:pointer;line-height:1;padding:0 4px}
+  .gclose:hover{color:var(--ink)}
+  .gpanel .gterm{padding:14px 0;border-bottom:1px solid var(--rule);scroll-margin-top:64px}
+  .gpanel .gterm:last-child{border-bottom:none}
+  .gpanel .gterm.flash{background:var(--signal-dim);border-radius:3px;
+    box-shadow:0 0 0 8px var(--signal-dim)}
+  .gpanel .gt{font-family:var(--f-mono);font-size:13.5px;color:var(--ink);margin-bottom:4px}
+  .gpanel .gd{font-size:14px;line-height:1.55;color:var(--muted)}
+  .gpanel .gx{font-family:var(--f-mono);font-size:11px;color:var(--signal);
+    margin-top:6px;display:block}
+  .gpanel .tcard{border:1px solid var(--rule);border-radius:4px;padding:var(--s2);
+    background:var(--paper-2);margin-bottom:var(--s2)}
+  .gpanel .tcard h4{font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;
+    letter-spacing:.14em;color:var(--signal);margin:0 0 8px;font-weight:400}
+  .gpanel .tcard svg{display:block;width:100%;height:auto;margin-bottom:8px}
+  .gpanel .tcard p{margin:0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+  .gpanel .tcard p b{color:var(--ink);font-weight:500}
+
+  /* a term wherever it appears in the prose */
+  .term{border-bottom:1px dashed var(--signal);color:inherit;cursor:help;
+    background:none;border-left:0;border-right:0;border-top:0;padding:0;font:inherit}
+  .term:hover{color:var(--signal)}
+  .term:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+  body.gopen-lock{overflow:hidden}
+
+  /* ================= part two ================= */
+
+  
+  @media (prefers-color-scheme: dark) {
+    
+  }
+  
+  
+
+  
+  
+  
+  
+
+  header.hero{padding:var(--s4) 0 var(--s4)}
+  .p2 .kicker{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.2em;
+          color:var(--muted);margin-bottom:var(--s3)}
+  
+  
+  .p2 .sub{color:var(--muted);max-width:62ch;margin:0 0 var(--s3)}
+  .p2 .sub b{color:var(--ink);font-weight:500}
+
+  /* file tabs */
+
+  .hexblock{font-family:var(--f-mono);font-size:12px;line-height:2;background:var(--paper-2);
+    border:1px solid var(--rule);border-radius:4px;padding:var(--s2) var(--s3);overflow-x:auto;
+    color:var(--muted);box-shadow:var(--shadow)}
+  .hexblock .m{color:var(--signal)} .hexblock .h{color:var(--ink)} .hexblock .n{color:var(--brass)}
+  .hexblock em{font-style:normal;color:var(--muted);opacity:.75}
+
+  
+  
+  .lead{color:var(--muted);max-width:64ch;margin:0 0 var(--s3)}
+  .lead b{color:var(--ink);font-weight:500}
+  .num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+  code{font-family:var(--f-mono);font-size:.88em;background:var(--signal-dim);color:var(--signal);
+       padding:1px 5px;border-radius:2px}
+
+  
+  .panel+
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:1px;
+    background:var(--rule);border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin:var(--s3) 0}
+  .stats div{background:var(--paper-2);padding:10px 13px 12px}
+  .stats .k{font-family:var(--f-mono);font-size:9px;text-transform:uppercase;letter-spacing:.13em;
+            color:var(--muted);margin-bottom:2px}
+  .stats .v{font-family:var(--f-mono);font-size:15px;color:var(--ink);
+            font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .stats .v small{font-size:10px;color:var(--muted)}
+
+  .regions{display:flex;height:52px;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+  .regions span{display:flex;align-items:center;justify-content:center;font-family:var(--f-mono);
+    font-size:10px;color:var(--paper);overflow:hidden;white-space:nowrap}
+  .zoomnote{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:10.5px;
+    color:var(--muted);margin-top:6px}
+
+  .rows{display:flex;flex-direction:column;gap:4px}
+  .row{display:grid;grid-template-columns:minmax(110px,200px) 1fr 92px;align-items:center;gap:var(--s2);
+       font-family:var(--f-mono);font-size:12px}
+  .row .rl{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .rv{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+  .bar{height:14px;border-radius:2px;background:var(--signal);min-width:2px}
+  .bar.b2{background:var(--brass)}
+
+  .bytes{display:flex;flex-wrap:wrap;gap:3px;font-family:var(--f-mono);font-size:11px}
+  .bytes b{display:block;padding:4px 6px;border-radius:2px;font-weight:400;border:1px solid var(--rule);
+    background:var(--paper);color:var(--muted)}
+  .g1 b{border-color:var(--signal);background:var(--signal-dim);color:var(--signal)}
+  .g2 b{border-color:var(--brass);background:var(--brass-dim);color:var(--brass)}
+  .bgroup{display:flex;flex-direction:column;gap:4px;margin-right:var(--s2);margin-bottom:var(--s2)}
+  .bgroup .lbl{font-family:var(--f-mono);font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  .bgroup .val{font-family:var(--f-mono);font-size:11px;color:var(--ink);word-break:break-all;max-width:38ch}
+  .bgroup .row2{display:flex;gap:3px;flex-wrap:wrap}
+
+  .lmap{display:flex;flex-direction:column;gap:2px}
+  .lrow{display:grid;grid-template-columns:34px 30px 1fr 78px;align-items:center;gap:9px;
+    font-family:var(--f-mono);font-size:11px;cursor:pointer;padding:1px 0;border-radius:2px;
+    border:1px solid transparent}
+  .lrow:hover{border-color:var(--rule)}
+  .lrow[aria-current="true"]{border-color:var(--signal)}
+  .lrow .li{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+  .lrow .lb{font-size:8.5px;letter-spacing:.04em;text-align:center;border-radius:2px;padding:1px 0;
+    border:1px solid var(--rule);color:var(--muted)}
+  .lrow.k-global .lb,.lrow.k-full .lb{border-color:var(--brass);color:var(--brass)}
+  .lrow.k-global .li,.lrow.k-full .li{color:var(--brass)}
+  .lrow.k-dense .lb{border-color:var(--signal);color:var(--signal)}
+  .lrow .lv{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+  .seg{display:flex;height:13px;border-radius:2px;overflow:hidden}
+  .seg i{display:block;height:100%}
+
+  .tt{width:100%;border-collapse:collapse;font-family:var(--f-mono);font-size:11px}
+  .tt th{text-align:left;font-weight:400;font-size:9px;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--muted);padding:0 8px 7px 0;border-bottom:1px solid var(--rule)}
+  .tt td{padding:5px 8px 5px 0;border-bottom:1px solid var(--rule);vertical-align:baseline;white-space:nowrap}
+  .tt tr:last-child td{border-bottom:none}
+  .tt .nm{color:var(--ink)} .tt .dim{color:var(--muted)}
+  .tt .sz{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
+  .tt th.r,.tt td.r{text-align:right}
+  .qt{display:inline-block;padding:1px 6px;border-radius:2px;font-size:9.5px;letter-spacing:.04em;
+      border:1px solid var(--rule);color:var(--f32)}
+  .qt.Q4_K,.qt.MXFP4{background:var(--signal-dim);color:var(--signal);border-color:var(--signal)}
+  .qt.Q6_K,.qt.BF16{background:var(--brass-dim);color:var(--brass);border-color:var(--brass)}
+  .tscroll{overflow-x:auto}
+  .two{display:grid;grid-template-columns:1fr;gap:var(--s2)}
+  @media(min-width:820px){.two{grid-template-columns:1fr 1fr}}
+
+  h3{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.15em;
+     color:var(--signal);font-weight:400;margin:0 0 var(--s2)}
+  h3.b{color:var(--brass)}
+
+  .strip{display:flex;gap:2px;flex-wrap:wrap}
+  .strip i{width:14px;height:14px;border-radius:2px;border:1px solid var(--rule);background:var(--paper);display:block}
+  .strip i.on{background:var(--brass);border-color:var(--brass)}
+  .striplbl{font-family:var(--f-mono);font-size:10px;color:var(--muted);margin:var(--s2) 0 5px}
+
+  
+  
+  
+
+  
+  
+  .note.warn{border-top-color:var(--brass);color:var(--brass)}
+  .note:first-child{margin-top:0;padding-top:0;border-top:none}
+
+  .check{display:flex;align-items:baseline;gap:var(--s2);margin-top:var(--s3);padding:var(--s2) var(--s3);
+    background:var(--signal-dim);border-left:2px solid var(--signal);border-radius:0 3px 3px 0}
+  .check .t{font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.14em;
+    color:var(--signal);flex:none}
+  .check .d{font-size:14.5px;line-height:1.55}
+  .check .d b{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+  .callout{border:1px solid var(--brass);background:var(--brass-dim);border-radius:4px;
+    padding:var(--s3);margin:var(--s3) 0}
+  .callout h3{color:var(--brass)}
+  .callout p{margin:0;font-size:14.5px;line-height:1.6}
+  .callout p+p{margin-top:var(--s2)}
+  .callout b{font-weight:600}
+
+  /* --- shards --- */
+  .shbar{display:flex;height:46px;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+  .shbar i{display:flex;align-items:center;justify-content:center;height:100%;font-family:var(--f-mono);
+    font-size:10px;color:var(--paper);border-right:1px solid var(--paper);overflow:hidden;white-space:nowrap}
+  .shbar i:last-child{border-right:none}
+  .sht{width:100%;border-collapse:collapse;font-size:13px;margin-top:var(--s3)}
+  .sht th{text-align:left;font-family:var(--f-mono);font-size:9px;text-transform:uppercase;
+    letter-spacing:.12em;color:var(--muted);font-weight:400;padding:0 10px 8px 0;border-bottom:1px solid var(--rule)}
+  .sht td{padding:11px 10px 11px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+  .sht tr:last-child td{border-bottom:none}
+  .sht .sn{font-family:var(--f-mono);color:var(--ink);white-space:nowrap}
+  .sht .sh-holds{color:var(--muted);line-height:1.45;font-size:12.5px}
+  .sht .r{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .sht .big{color:var(--ink)} .sht .small{color:var(--signal)}
+
+  /* --- glossary --- */
+  .tensorbox{display:grid;grid-template-columns:1fr;gap:var(--s3)}
+  @media(min-width:760px){.tensorbox{grid-template-columns:repeat(3,1fr)}}
+  .tcard{border:1px solid var(--rule);border-radius:4px;padding:var(--s3);background:var(--paper)}
+  .tcard h4{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;letter-spacing:.14em;
+    color:var(--signal);margin:0 0 var(--s2);font-weight:400}
+  .tcard svg{display:block;width:100%;height:auto;margin-bottom:var(--s2)}
+  .tcard p{margin:0;font-size:13.5px;line-height:1.5;color:var(--muted)}
+  .tcard p b{color:var(--ink);font-weight:500}
+  .tcard code{font-size:11px}
+
+  .gloss{display:grid;grid-template-columns:1fr;gap:1px;background:var(--rule);
+    border:1px solid var(--rule);border-radius:4px;overflow:hidden}
+  @media(min-width:700px){.gloss{grid-template-columns:1fr 1fr}}
+  .gterm{background:var(--paper-2);padding:13px 16px 15px}
+  .gterm .gt{font-family:var(--f-mono);font-size:13px;color:var(--ink);margin-bottom:3px}
+  .gterm .gd{font-size:13.5px;line-height:1.5;color:var(--muted)}
+  .gterm .gx{font-family:var(--f-mono);font-size:10.5px;color:var(--signal);margin-top:5px;
+    display:block;letter-spacing:.01em}
+
+  .filepicker{border:1px solid var(--signal);border-radius:4px;padding:var(--s3);background:var(--paper-2);
+    box-shadow:var(--shadow)}
+  .filepicker h3{margin-bottom:var(--s2)}
+
+  /* --- explainer visuals --- */
+  .zoomrow{display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:var(--s3)}
+  .zoomrow:last-child{margin-bottom:0}
+  .zoomtop{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:11px}
+  .zoomtop .zl{color:var(--ink)} .zoomtop .zr{color:var(--muted)}
+  .zoombar{display:flex;height:30px;border:1px solid var(--rule);border-radius:3px;overflow:hidden;background:var(--paper)}
+  .zoombar i{display:block;height:100%}
+  .zoomcap{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+  .zoomcap b{color:var(--signal)}
+  .vdown{font-family:var(--f-mono);font-size:14px;color:var(--signal);text-align:center;line-height:1}
+
+  .anat{display:flex;height:34px;border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-bottom:5px}
+  .anat i{display:flex;align-items:center;justify-content:center;height:100%;font-family:var(--f-mono);
+    font-size:9.5px;color:var(--paper);overflow:hidden;white-space:nowrap}
+  .anatcap{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:10.5px;
+    color:var(--muted);margin-bottom:var(--s3)}
+
+  .dots{display:grid;grid-template-columns:repeat(56,1fr);gap:2px;margin-bottom:var(--s2)}
+  .dots i{display:block;aspect-ratio:1;border-radius:1px;background:var(--rule);opacity:.55}
+  .dots i.on{background:var(--brass);opacity:1}
+
+  .cmp{width:100%;border-collapse:collapse;font-size:14px}
+  .cmp th,.cmp td{text-align:left;padding:10px 12px 10px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+  .cmp th{font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.13em;
+    color:var(--muted);font-weight:400}
+  .cmp th.a{color:var(--signal)} .cmp th.b{color:var(--brass)}
+  .cmp td:first-child{font-family:var(--f-mono);font-size:11px;color:var(--muted);width:32%}
+  .cmp tr:last-child td{border-bottom:none}
+
+  .kstrip{display:flex;gap:2px;flex-wrap:wrap}
+  .kstrip i{width:14px;height:22px;border-radius:2px;display:block;border:1px solid var(--rule)}
+  .kstrip i.k-kda{background:var(--signal-dim);border-color:var(--signal)}
+  .kstrip i.k-full{background:var(--brass);border-color:var(--brass)}
+  .kstrip i.k-dense{background:var(--ink);border-color:var(--ink)}
+
+  .divider{margin-top:var(--s5);padding-top:var(--s3);border-top:2px solid var(--rule)}
+  .divider 
+
+  
+  
+  @media(prefers-reduced-motion:no-preference){}
+
+</style>
+
+<div class="modelbar">
+  <div class="mbinner">
+    <span class="mblabel">Model</span>
+    <div class="mbtabs" role="tablist" aria-label="Model">
+      <button role="tab" aria-selected="false" data-model="e4b"><span class="fam">Gemma 4</span>E4B</button>
+      <button role="tab" aria-selected="true"  data-model="12b"><span class="fam">Gemma 4</span>12B</button>
+      <button role="tab" aria-selected="false" data-model="31b"><span class="fam">Gemma 4</span>31B</button>
+      <button role="tab" aria-selected="false" data-model="a4b"><span class="fam">Gemma 4</span>26B A4B</button>
+      <button role="tab" aria-selected="false" data-model="k3"><span class="fam">Moonshot</span>Kimi K3</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+<div class="cols">
+
+  <nav class="rail" aria-label="Load sequence">
+    <div class="rail-title">Load sequence</div>
+    <ul class="rail-list">
+      <li><a href="#pick"><span class="n">00</span><span>Pick a file</span></a></li>
+      <li><a href="#s1"><span class="n">01</span><span>Open the file</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span>Read the spec</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span>Read the index</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span>Map, don't load</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span>Packed numbers</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span>Never unpack</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span>Split CPU / GPU</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span>Run it</span></a></li>
+      <li><a href="#s9"><span class="n">09</span><span>Why it's fast</span></a></li>
+      <li class="railgap"><a href="#part2"><span class="n">▾</span><span>Real files</span></a></li>
+      <li><a href="#sec-pick"><span class="n">10</span><span>Pick a file</span></a></li>
+      <li><a href="#sec-zoom"><span class="n">11</span><span>Three steps</span></a></li>
+      <li><a href="#sec-experts"><span class="n">12</span><span>16 of 896</span></a></li>
+      <li><a href="#sec-RAW"><span class="n">13</span><span>Raw records</span></a></li>
+    </ul>
+  </nav>
+
+  <main>
+
+    <!-- ================= HERO ================= -->
+    <header class="hero">
+      <div class="hexstrip"><b>47 47 55 46</b> 03 00 00 00 &nbsp;·&nbsp; 1F 01 00 00 00 00 00 00 &nbsp;·&nbsp; 2B 00 00 00 &nbsp;·&nbsp; 67 65 6E 65 72 61 6C 2E &nbsp;·&nbsp; 61 72 63 68 69 74 65 63</div>
+
+      <h1>One file,<br>one <em>word</em> at a time.</h1>
+
+      <p class="lede">A GGUF file is a language model on disk — <strong>weights, settings and vocabulary in a single blob</strong>. This is what happens between opening it and the first word coming out.</p>
+
+      <dl class="primer">
+        <div>
+          <dt>The model</dt>
+          <dd>A few hundred <b>giant tables of numbers</b>. Text goes in as numbers, gets multiplied through every table, and a next-word guess comes out.</dd>
+        </div>
+        <div>
+          <dt>The numbers</dt>
+          <dd>Billions of them. Stored <b>squeezed down to 4 bits each</b> so the whole thing fits in memory.</dd>
+        </div>
+        <div>
+          <dt>The catch</dt>
+          <dd>Every number gets read <b>once per word produced</b>. That's a bandwidth problem, not a math problem.</dd>
+        </div>
+      </dl>
+
+      <figure class="rise fig-lead">
+        <svg viewBox="0 0 720 210" role="img" aria-label="Cross-section of a GGUF file: a small header, a metadata section, a tensor index, and a very large block of weight data.">
+          <!-- ruler -->
+          <g class="ln">
+            <line x1="0" y1="46" x2="720" y2="46"/>
+            <line x1="0" y1="40" x2="0" y2="46"/>
+            <line x1="44" y1="40" x2="44" y2="46"/>
+            <line x1="212" y1="40" x2="212" y2="46"/>
+            <line x1="316" y1="40" x2="316" y2="46"/>
+            <line x1="719" y1="40" x2="719" y2="46"/>
+          </g>
+          <text class="t-sm" x="0" y="32">byte 0</text>
+          <text class="t-sm" x="719" y="32" text-anchor="end">end of file</text>
+
+          <!-- segments -->
+          <rect class="bx-sig" x="0"   y="60" width="44"  height="62" rx="2"/>
+          <rect class="bx-sig" x="46"  y="60" width="164" height="62" rx="2"/>
+          <rect class="bx-sig" x="212" y="60" width="102" height="62" rx="2"/>
+          <rect class="bx-brs" x="316" y="60" width="403" height="62" rx="2"/>
+
+          <text class="t-lbl t-ink" x="22"  y="96" text-anchor="middle">·</text>
+          <text class="t-lbl t-ink" x="128" y="90" text-anchor="middle">settings</text>
+          <text class="t-lbl"       x="128" y="106" text-anchor="middle">+ vocabulary</text>
+          <text class="t-lbl t-ink" x="263" y="96" text-anchor="middle">index</text>
+          <text class="t-lbl t-ink" x="517" y="90" text-anchor="middle">the numbers</text>
+          <text class="t-lbl"       x="517" y="106" text-anchor="middle">every table, back to back</text>
+
+          <!-- labels below -->
+          <g class="ln">
+            <line x1="22"  y1="126" x2="22"  y2="142"/>
+            <line x1="128" y1="126" x2="128" y2="142"/>
+            <line x1="263" y1="126" x2="263" y2="142"/>
+            <line x1="517" y1="126" x2="517" y2="142"/>
+          </g>
+          <text class="t-sm t-sig" x="22"  y="158" text-anchor="middle">header</text>
+          <text class="t-sm t-sig" x="128" y="158" text-anchor="middle">metadata</text>
+          <text class="t-sm t-sig" x="263" y="158" text-anchor="middle">index</text>
+          <text class="t-sm t-brs" x="517" y="158" text-anchor="middle">weights</text>
+
+          <text class="t-lbl" x="22"  y="176" text-anchor="middle">24 B</text>
+          <text class="t-lbl" x="128" y="176" text-anchor="middle">~2 MB</text>
+          <text class="t-lbl" x="263" y="176" text-anchor="middle">~200 KB</text>
+          <text class="t-lbl t-ink" x="517" y="176" text-anchor="middle">4 GB — 400 GB</text>
+
+          <line class="ln-dash" x1="316" y1="188" x2="719" y2="188"/>
+          <text class="t-sm" x="517" y="204" text-anchor="middle">99.9% of the file</text>
+        </svg>
+        <figcaption>The whole format in one picture. <b>Almost all of it is weights</b> — the rest is a small label on the front telling the program how to read them.</figcaption>
+      </figure>
+    </header>
+
+    <!-- ================= SELECTOR ================= -->
+    <section class="step" id="pick">
+      <div class="eyebrow"><span class="n">00</span><span>Pick a file</span></div>
+      <h2>A real one, with real numbers</h2>
+      <p>Google's <b>Gemma 4</b> shipped in April 2026 in five sizes. Pick one and every figure below is that file: its shape, where the bytes go, what each download weighs.</p>
+
+      <div class="picker">
+
+        <div class="statgrid">
+          <div><div class="k">Layers</div><div class="v" data-f="layers"></div></div>
+          <div><div class="k">Width</div><div class="v" data-f="hidden"></div></div>
+          <div><div class="k">Vocabulary</div><div class="v" data-f="vocab"></div></div>
+          <div><div class="k">Context</div><div class="v" data-f="ctx"></div></div>
+          <div><div class="k">Weights</div><div class="v" data-f="total"></div></div>
+          <div><div class="k">Read per word</div><div class="v" data-f="active"></div></div>
+        </div>
+
+        <div class="split">
+
+          <div class="panel">
+            <h3>Where the file goes</h3>
+            <table class="kv">
+              <tbody>
+                <tr><td>header</td><td>24 <span class="u">B</span></td></tr>
+                <tr><td>metadata + vocabulary</td><td data-f="meta"></td></tr>
+                <tr><td>tensor index</td><td data-f="index"></td></tr>
+                <tr><td>weights</td><td data-f="blob"></td></tr>
+                <tr class="tot"><td data-f="q4label"></td><td data-f="q4size"></td></tr>
+              </tbody>
+            </table>
+            <p class="note">Measured on the real 12B file: <b>15.78 MB</b>, of which <b>9.25 MB</b> is merge rules and 4.41 MB is the <b data-f="vocabshort"></b>-entry vocabulary. The whole family shares one tokenizer.</p>
+          </div>
+
+          <div class="panel">
+            <h3>One layer, exactly</h3>
+            <table class="kv">
+              <tbody>
+                <tr><td data-f="lwq"></td><td data-f="wq"></td></tr>
+                <tr><td data-f="lwk"></td><td data-f="wk"></td></tr>
+                <tr><td data-f="lwv"></td><td data-f="wv"></td></tr>
+                <tr><td data-f="lwo"></td><td data-f="wo"></td></tr>
+                <tr><td data-f="ffnlabel"></td><td data-f="wffn"></td></tr>
+                <tr class="tot"><td>per layer</td><td data-f="wlayer"></td></tr>
+              </tbody>
+            </table>
+            <p class="note">Times <b data-f="layersshort"></b> layers, plus a <b data-f="embed"></b> lookup table for the vocabulary.</p>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top: var(--s3);">
+          <h3>What the weights are spent on</h3>
+          <div class="stack" data-f="stack"></div>
+          <div class="legend" data-f="legend"></div>
+          <p class="note" data-f="stacknote"></p>
+        </div>
+
+        <div class="panel" style="margin-top: var(--s3);">
+          <h3>Every download, same model</h3>
+          <div class="qlist" data-f="quants"></div>
+          <p class="note">Real file sizes. <b>Q4_K_M</b> works out to about <b data-f="bpw"></b> bits per weight — not 4, because the sensitive tables keep more.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= 01 ================= -->
+    <section class="step" id="s1">
+      <div class="eyebrow"><span class="n">01</span><span>Open the file</span></div>
+      <h2>Everything in one place</h2>
+      <p>Models used to ship as a folder: config here, vocabulary there, weights split across numbered files, plus a script to glue it together. GGUF puts all of it in <b>one file that describes itself</b>.</p>
+      <p>Open it, read the first four bytes — <code>GGUF</code> — and you know what you have.</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 200" role="img" aria-label="Before: six separate files plus a script. After: one GGUF file.">
+          <text class="t-sm" x="0" y="14">before</text>
+          <rect class="bx" x="0"  y="26" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="42">config.json</text>
+          <rect class="bx" x="0"  y="56" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="72">tokenizer.json</text>
+          <rect class="bx" x="0"  y="86" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="102">vocab.txt</text>
+          <rect class="bx" x="0"  y="116" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="132">weights-1-of-3</text>
+          <rect class="bx" x="0"  y="146" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="162">weights-2-of-3</text>
+          <rect class="bx" x="0"  y="176" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="192">weights-3-of-3</text>
+
+          <rect class="bx" x="146" y="86" width="118" height="54" rx="2" stroke-dasharray="4 3"/>
+          <text class="t-lbl" x="205" y="108" text-anchor="middle">+ a script</text>
+          <text class="t-lbl" x="205" y="124" text-anchor="middle">to assemble it</text>
+
+          <path class="ln-sig" d="M 288 113 L 356 113"/>
+          <path class="ln-sig" d="M 348 108 L 356 113 L 348 118"/>
+
+          <text class="t-sm" x="386" y="14">after</text>
+          <rect class="bx-sig" x="386" y="26" width="334" height="174" rx="3"/>
+          <text class="t-big t-ink" x="553" y="100" text-anchor="middle">model.gguf</text>
+          <text class="t-lbl" x="553" y="124" text-anchor="middle">settings · vocabulary · every weight</text>
+          <text class="t-sm t-sig" x="553" y="150" text-anchor="middle">no script required</text>
+        </svg>
+        <figcaption>The file carries its own instructions, so <b>one program can run many different models</b> without knowing anything about them in advance.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ================= 02 ================= -->
+    <section class="step" id="s2">
+      <div class="eyebrow"><span class="n">02</span><span>Read the spec</span></div>
+      <h2>A spec sheet at the front</h2>
+      <p>Next comes a list of key–value pairs — a few kilobytes describing the model's shape and how to turn text into numbers. The program reads this and now knows <b>what to build</b>.</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 232" role="img" aria-label="Metadata key-value pairs on the left feeding three conclusions on the right.">
+          <rect class="bx" x="0" y="10" width="300" height="212" rx="3"/>
+          <text class="t-sm t-sig" x="16" y="34">key → value</text>
+          <line class="ln" x1="16" y1="44" x2="284" y2="44"/>
+
+          <text class="t-lbl t-ink" x="16" y="70">family</text>       <text class="t-lbl" x="284" y="70" text-anchor="end">llama</text>
+          <text class="t-lbl t-ink" x="16" y="96">layers</text>       <text class="t-lbl" x="284" y="96" text-anchor="end">32</text>
+          <text class="t-lbl t-ink" x="16" y="122">width</text>       <text class="t-lbl" x="284" y="122" text-anchor="end">4096</text>
+          <text class="t-lbl t-ink" x="16" y="148">memory span</text> <text class="t-lbl" x="284" y="148" text-anchor="end">8192 words</text>
+          <text class="t-lbl t-ink" x="16" y="174">vocabulary</text>  <text class="t-lbl" x="284" y="174" text-anchor="end">128 256 entries</text>
+          <text class="t-lbl t-ink" x="16" y="200">chat format</text> <text class="t-lbl" x="284" y="200" text-anchor="end">template string</text>
+
+          <path class="ln-sig" d="M 300 116 L 330 116 M 330 60 L 330 172 M 330 60 L 386 60 M 330 116 L 386 116 M 330 172 L 386 172"/>
+          <path class="ln-sig" d="M 378 55 L 386 60 L 378 65 M 378 111 L 386 116 L 378 121 M 378 167 L 386 172 L 378 177"/>
+
+          <rect class="bx-sig" x="396" y="40"  width="324" height="40" rx="2"/>
+          <text class="t-lbl t-ink" x="412" y="65">how to wire the model together</text>
+          <rect class="bx-sig" x="396" y="96"  width="324" height="40" rx="2"/>
+          <text class="t-lbl t-ink" x="412" y="121">how much memory to reserve</text>
+          <rect class="bx-sig" x="396" y="152" width="324" height="40" rx="2"/>
+          <text class="t-lbl t-ink" x="412" y="177">how to turn your text into numbers</text>
+        </svg>
+        <figcaption>Nothing is hardcoded in the program. <b>Change the file, change the model</b> — the same binary handles both.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ================= 03 ================= -->
+    <section class="step" id="s3">
+      <div class="eyebrow"><span class="n">03</span><span>Read the index</span></div>
+      <h2>Then a table of contents</h2>
+      <p>After the settings comes a directory: every table of numbers by name, its size, and <b>the exact byte where it starts</b>. Think of a zip file's central directory.</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 200" role="img" aria-label="Index entries with names and byte offsets pointing into positions in the weight blob.">
+          <text class="t-sm" x="0" y="14">index entry</text>
+          <rect class="bx" x="0" y="26" width="290" height="26" rx="2"/>
+          <text class="t-lbl t-ink" x="12" y="43">layer 0 · attention</text><text class="t-lbl t-sig" x="278" y="43" text-anchor="end">@ 0x0000</text>
+          <rect class="bx" x="0" y="58" width="290" height="26" rx="2"/>
+          <text class="t-lbl t-ink" x="12" y="75">layer 0 · feed-forward</text><text class="t-lbl t-sig" x="278" y="75" text-anchor="end">@ 0x2A00</text>
+          <rect class="bx" x="0" y="90" width="290" height="26" rx="2"/>
+          <text class="t-lbl t-ink" x="12" y="107">layer 1 · attention</text><text class="t-lbl t-sig" x="278" y="107" text-anchor="end">@ 0x9C00</text>
+          <rect class="bx" x="0" y="122" width="290" height="26" rx="2"/>
+          <text class="t-lbl" x="12" y="139">… 290 more</text>
+
+          <path class="ln-sig" d="M 292 39  C 340 39,  340 96, 396 96"/>
+          <path class="ln-sig" d="M 292 71  C 340 71,  340 96, 470 96"/>
+          <path class="ln-sig" d="M 292 103 C 340 103, 340 96, 560 96"/>
+
+          <rect class="bx-brs" x="396" y="82" width="324" height="30" rx="2"/>
+          <line class="ln-brs" x1="470" y1="82" x2="470" y2="112"/>
+          <line class="ln-brs" x1="560" y1="82" x2="560" y2="112"/>
+          <line class="ln-brs" x1="640" y1="82" x2="640" y2="112"/>
+          <text class="t-sm t-brs" x="396" y="72">the weights, back to back</text>
+          <text class="t-sm" x="720" y="132" text-anchor="end">no gaps · no parsing · just offsets</text>
+        </svg>
+        <figcaption>Because everything is at a known offset, finding a table is <b>arithmetic, not searching</b>.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ================= 04 ================= -->
+    <section class="step" id="s4">
+      <div class="eyebrow"><span class="n">04</span><span>Map, don't load</span></div>
+      <h2>The file is never really read</h2>
+      <p>Here's the part that surprises people. The program doesn't copy 20 GB into memory. It calls <code>mmap</code> — <b>the file gets an address range, and pages arrive only when touched</b>.</p>
+      <p>The bytes on disk are already in the exact layout the math wants, so there's no conversion step. Nothing to parse, nothing to rearrange.</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 226" role="img" aria-label="A file on disk mapped into an address range, with only some pages resident in RAM.">
+          <text class="t-sm t-sig" x="0" y="14">address range the program sees</text>
+          <g>
+            <rect class="bx-sig" x="0"   y="26" width="88" height="34" rx="2"/>
+            <rect class="bx-sig" x="92"  y="26" width="88" height="34" rx="2"/>
+            <rect class="bx"     x="184" y="26" width="88" height="34" rx="2" stroke-dasharray="3 3"/>
+            <rect class="bx-sig" x="276" y="26" width="88" height="34" rx="2"/>
+            <rect class="bx"     x="368" y="26" width="88" height="34" rx="2" stroke-dasharray="3 3"/>
+            <rect class="bx"     x="460" y="26" width="88" height="34" rx="2" stroke-dasharray="3 3"/>
+            <rect class="bx-sig" x="552" y="26" width="88" height="34" rx="2"/>
+            <rect class="bx"     x="644" y="26" width="76" height="34" rx="2" stroke-dasharray="3 3"/>
+          </g>
+          <text class="t-sm t-sig" x="0" y="80">solid = in RAM now</text>
+          <text class="t-sm" x="200" y="80">dashed = still on disk, fetched on first touch</text>
+
+          <g class="ln-dash">
+            <line x1="44"  y1="96" x2="44"  y2="140"/>
+            <line x1="136" y1="96" x2="136" y2="140"/>
+            <line x1="228" y1="96" x2="228" y2="140"/>
+            <line x1="320" y1="96" x2="320" y2="140"/>
+            <line x1="412" y1="96" x2="412" y2="140"/>
+            <line x1="504" y1="96" x2="504" y2="140"/>
+            <line x1="596" y1="96" x2="596" y2="140"/>
+            <line x1="682" y1="96" x2="682" y2="140"/>
+          </g>
+
+          <rect class="bx-brs" x="0" y="140" width="720" height="34" rx="2"/>
+          <text class="t-lbl t-brs" x="360" y="162" text-anchor="middle">model.gguf on disk</text>
+
+          <line class="ln" x1="0" y1="196" x2="720" y2="196"/>
+          <text class="t-sm t-ink" x="0" y="216">first run: seconds</text>
+          <text class="t-sm t-ink" x="240" y="216">second run: instant</text>
+          <text class="t-sm t-ink" x="480" y="216">two programs share the same pages</text>
+        </svg>
+        <figcaption>Loading a 20 GB model is <b>pointer arithmetic</b>. The operating system's page cache does the rest.</figcaption>
+      </figure>
+
+      <div class="take"><span>Note</span><span>This is the same trick a database uses for its data files. Nothing AI-specific about it — it just matters more when the file is enormous.</span></div>
+    </section>
+
+    <!-- ================= 05 ================= -->
+    <section class="step" id="s5">
+      <div class="eyebrow"><span class="n">05</span><span>Packed numbers</span></div>
+      <h2>Why the file fits at all</h2>
+      <p>The weights aren't stored as normal floating-point numbers. They're <b>rounded onto a grid of 16 steps and stored as 4 bits</b> — half a byte each.</p>
+      <p>Rounding on its own would be too crude. So the numbers are handled in <b>groups of 32</b>, and each group stores its own step size. A group of small numbers gets a fine grid, a group of large ones gets a coarse grid.</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 150" role="img" aria-label="Original values snapping to the nearest of sixteen evenly spaced rungs.">
+          <text class="t-sm" x="0" y="14">original values</text>
+          <g fill="var(--brass)">
+            <circle cx="38" cy="42" r="3.5"/><circle cx="116" cy="42" r="3.5"/><circle cx="171" cy="42" r="3.5"/>
+            <circle cx="253" cy="42" r="3.5"/><circle cx="330" cy="42" r="3.5"/><circle cx="392" cy="42" r="3.5"/>
+            <circle cx="466" cy="42" r="3.5"/><circle cx="541" cy="42" r="3.5"/><circle cx="618" cy="42" r="3.5"/><circle cx="681" cy="42" r="3.5"/>
+          </g>
+
+          <g class="ln-dash">
+            <line x1="38"  y1="50" x2="42"  y2="86"/><line x1="116" y1="50" x2="128" y2="86"/>
+            <line x1="171" y1="50" x2="176" y2="86"/><line x1="253" y1="50" x2="262" y2="86"/>
+            <line x1="330" y1="50" x2="336" y2="86"/><line x1="392" y1="50" x2="396" y2="86"/>
+            <line x1="466" y1="50" x2="470" y2="86"/><line x1="541" y1="50" x2="544" y2="86"/>
+            <line x1="618" y1="50" x2="618" y2="86"/><line x1="681" y1="50" x2="692" y2="86"/>
+          </g>
+
+          <line class="ln" x1="0" y1="94" x2="720" y2="94"/>
+          <g class="ln-sig">
+            <line x1="9"   y1="88" x2="9"   y2="100"/><line x1="56"  y1="88" x2="56"  y2="100"/>
+            <line x1="103" y1="88" x2="103" y2="100"/><line x1="150" y1="88" x2="150" y2="100"/>
+            <line x1="197" y1="88" x2="197" y2="100"/><line x1="244" y1="88" x2="244" y2="100"/>
+            <line x1="291" y1="88" x2="291" y2="100"/><line x1="338" y1="88" x2="338" y2="100"/>
+            <line x1="385" y1="88" x2="385" y2="100"/><line x1="432" y1="88" x2="432" y2="100"/>
+            <line x1="479" y1="88" x2="479" y2="100"/><line x1="526" y1="88" x2="526" y2="100"/>
+            <line x1="573" y1="88" x2="573" y2="100"/><line x1="620" y1="88" x2="620" y2="100"/>
+            <line x1="667" y1="88" x2="667" y2="100"/><line x1="714" y1="88" x2="714" y2="100"/>
+          </g>
+          <text class="t-sm t-sig" x="0" y="120">16 rungs — that's all 4 bits can say</text>
+          <text class="t-sm" x="720" y="120" text-anchor="end">spacing stored once per group of 32</text>
+          <text class="t-lbl" x="360" y="142" text-anchor="middle">each value keeps only its rung number</text>
+        </svg>
+        <figcaption>Quantization is <b>rounding to a grid</b>, with the grid spacing chosen per group so the rounding error stays small.</figcaption>
+      </figure>
+
+      <p>The arithmetic is not subtle:</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 216" role="img" aria-label="Sixty-four bytes of original numbers compressed into an eighteen byte block.">
+          <defs>
+            <pattern id="cellsBig" width="22.5" height="40" patternUnits="userSpaceOnUse">
+              <rect x="1" y="0" width="20.5" height="40" fill="var(--brass-dim)" stroke="var(--brass)" stroke-width="1"/>
+            </pattern>
+            <pattern id="cellsSm" width="11.25" height="34" patternUnits="userSpaceOnUse">
+              <rect x=".6" y="0" width="10" height="34" fill="var(--signal-dim)" stroke="var(--signal)" stroke-width="1"/>
+            </pattern>
+          </defs>
+
+          <text class="t-sm" x="0" y="14">32 numbers, as normally stored</text>
+          <rect x="0" y="24" width="720" height="40" fill="url(#cellsBig)"/>
+          <text class="t-lbl" x="0" y="82">2 bytes each</text>
+          <text class="t-lbl t-ink" x="720" y="82" text-anchor="end">64 bytes</text>
+
+          <path class="ln-sig" d="M 360 94 L 360 118 M 355 110 L 360 118 L 365 110"/>
+
+          <text class="t-sm t-sig" x="0" y="140">the same 32 numbers, packed</text>
+          <rect x="0" y="150" width="360" height="34" fill="url(#cellsSm)"/>
+          <rect class="bx-brs" x="366" y="150" width="46" height="34" rx="2"/>
+          <text class="t-sm t-brs" x="389" y="171" text-anchor="middle">step</text>
+          <text class="t-lbl" x="0" y="200">4 bits each</text>
+          <text class="t-lbl t-brs" x="389" y="200" text-anchor="middle">+2 B</text>
+          <text class="t-big t-ink" x="720" y="176" text-anchor="end">18 bytes</text>
+          <text class="t-sm t-sig" x="720" y="200" text-anchor="end">3.6× smaller</text>
+        </svg>
+        <figcaption>A <b>16 GB model becomes about 4.5 GB</b> — the difference between fitting on your machine and not.</figcaption>
+      </figure>
+
+      <p>Not everything gets squeezed equally. A few tables are more sensitive than the rest, so they're kept at higher precision — the file mixes formats table by table.</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 190" role="img" aria-label="Layer stack showing most tables at four bits and a few kept at higher precision.">
+          <text class="t-sm t-sig" x="0" y="14">word lookup table</text>
+          <rect class="bx-brs" x="180" y="2" width="540" height="22" rx="2"/>
+          <text class="t-lbl t-brs" x="450" y="18" text-anchor="middle">higher precision — errors here spread everywhere</text>
+
+          <text class="t-sm" x="0" y="48">layer 1</text>
+          <rect class="bx-sig" x="180" y="34" width="540" height="18" rx="2"/>
+          <text class="t-sm" x="0" y="72">layer 2</text>
+          <rect class="bx-sig" x="180" y="58" width="540" height="18" rx="2"/>
+          <text class="t-sm" x="0" y="96">…</text>
+          <rect class="bx-sig" x="180" y="82" width="540" height="18" rx="2"/>
+          <text class="t-sm" x="0" y="120">layer 32</text>
+          <rect class="bx-sig" x="180" y="106" width="540" height="18" rx="2"/>
+          <text class="t-lbl t-sig" x="450" y="119" text-anchor="middle">4 bits · the bulk of the file</text>
+
+          <text class="t-sm t-brs" x="0" y="150">output layer</text>
+          <rect class="bx-brs" x="180" y="136" width="540" height="22" rx="2"/>
+          <text class="t-lbl t-brs" x="450" y="152" text-anchor="middle">higher precision — this one picks the actual word</text>
+
+          <line class="ln" x1="0" y1="170" x2="720" y2="170"/>
+          <text class="t-sm" x="0" y="186">the names you see — Q4_K_M, Q5_K_M — are just recipes for which tables get which treatment</text>
+        </svg>
+        <figcaption>That's why a "4-bit" model averages closer to <b>4.8 bits per number</b> in practice.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ================= 06 ================= -->
+    <section class="step" id="s6">
+      <div class="eyebrow"><span class="n">06</span><span>Never unpack</span></div>
+      <h2>The packed numbers stay packed</h2>
+      <p>The obvious approach would be to unpack a table back to real numbers, then multiply. That would throw away the entire benefit.</p>
+      <p>Instead the incoming data gets packed too, and the multiply happens <b>directly on the small integers</b>. One correction at the end restores the scale.</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 214" role="img" aria-label="The naive unpack-then-multiply path crossed out, above the direct integer path.">
+          <text class="t-sm" x="0" y="14">the obvious way</text>
+          <g opacity=".45">
+            <rect class="bx" x="0" y="24" width="150" height="38" rx="2"/>
+            <text class="t-lbl" x="75" y="48" text-anchor="middle">packed weights</text>
+            <path class="ln" d="M 154 43 L 186 43 M 178 38 L 186 43 L 178 48"/>
+            <rect class="bx" x="190" y="24" width="180" height="38" rx="2"/>
+            <text class="t-lbl" x="280" y="48" text-anchor="middle">unpack all of it</text>
+            <path class="ln" d="M 374 43 L 406 43 M 398 38 L 406 43 L 398 48"/>
+            <rect class="bx" x="410" y="24" width="150" height="38" rx="2"/>
+            <text class="t-lbl" x="485" y="48" text-anchor="middle">multiply</text>
+          </g>
+          <path stroke="var(--brass)" stroke-width="1.6" fill="none" d="M 200 20 L 360 66 M 360 20 L 200 66"/>
+          <text class="t-sm t-brs" x="576" y="48">defeats the point</text>
+
+          <line class="ln" x1="0" y1="88" x2="720" y2="88"/>
+
+          <text class="t-sm t-sig" x="0" y="112">what actually happens</text>
+          <rect class="bx-sig" x="0" y="122" width="140" height="42" rx="2"/>
+          <text class="t-lbl t-ink" x="70" y="140" text-anchor="middle">packed weights</text>
+          <text class="t-sm" x="70" y="156" text-anchor="middle">straight from the map</text>
+
+          <rect class="bx-sig" x="0" y="172" width="140" height="30" rx="2"/>
+          <text class="t-lbl t-ink" x="70" y="192" text-anchor="middle">your data, packed too</text>
+
+          <path class="ln-sig" d="M 144 143 L 190 143 L 190 172 M 144 187 L 190 187 M 190 158 L 220 158 M 212 153 L 220 158 L 212 163"/>
+
+          <rect class="bx-sig" x="224" y="132" width="196" height="52" rx="2"/>
+          <text class="t-lbl t-ink" x="322" y="152" text-anchor="middle">whole-number multiply-add</text>
+          <text class="t-sm t-sig" x="322" y="170" text-anchor="middle">the instruction CPUs are fastest at</text>
+
+          <path class="ln-sig" d="M 424 158 L 456 158 M 448 153 L 456 158 L 448 163"/>
+          <rect class="bx-brs" x="460" y="132" width="120" height="52" rx="2"/>
+          <text class="t-lbl t-brs" x="520" y="163" text-anchor="middle">apply the step</text>
+
+          <path class="ln-sig" d="M 584 158 L 616 158 M 608 153 L 616 158 L 608 163"/>
+          <rect class="bx" x="620" y="132" width="100" height="52" rx="2"/>
+          <text class="t-lbl t-ink" x="670" y="163" text-anchor="middle">result</text>
+        </svg>
+        <figcaption>Only a handful of numbers are ever expanded at once. <b>The full-size version of the model never exists in memory.</b></figcaption>
+      </figure>
+    </section>
+
+    <!-- ================= 07 ================= -->
+    <section class="step" id="s7">
+      <div class="eyebrow"><span class="n">07</span><span>Split CPU / GPU</span></div>
+      <h2>Put what fits on the GPU</h2>
+      <p>The layers are independent chunks at known offsets, so you can hand the first N to the GPU and leave the rest on the CPU. <b>You pick N; it's usually one flag.</b></p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 208" role="img" aria-label="Layers 1 to 24 on the GPU, layers 25 to 32 on the CPU, with a single handoff between them.">
+          <rect class="bx-sig" x="0" y="10" width="440" height="88" rx="3"/>
+          <text class="t-sm t-sig" x="16" y="30">GPU — as many layers as VRAM holds</text>
+          <g>
+            <rect class="bx-sig" x="16" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="50" y="42" width="30" height="40" rx="2"/>
+            <rect class="bx-sig" x="84" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="118" y="42" width="30" height="40" rx="2"/>
+            <rect class="bx-sig" x="152" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="186" y="42" width="30" height="40" rx="2"/>
+            <rect class="bx-sig" x="220" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="254" y="42" width="30" height="40" rx="2"/>
+            <rect class="bx-sig" x="288" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="322" y="42" width="30" height="40" rx="2"/>
+            <rect class="bx-sig" x="356" y="42" width="30" height="40" rx="2"/><rect class="bx-sig" x="390" y="42" width="30" height="40" rx="2"/>
+          </g>
+          <text class="t-sm" x="220" y="94" text-anchor="middle">layers 1 – 24</text>
+
+          <path class="ln-brs" d="M 444 54 L 486 54 M 478 49 L 486 54 L 478 59"/>
+          <text class="t-sm t-brs" x="465" y="42" text-anchor="middle">one</text>
+          <text class="t-sm t-brs" x="465" y="76" text-anchor="middle">handoff</text>
+
+          <rect class="bx" x="490" y="10" width="230" height="88" rx="3"/>
+          <text class="t-sm" x="506" y="30">CPU — the leftovers</text>
+          <rect class="bx" x="506" y="42" width="30" height="40" rx="2"/><rect class="bx" x="540" y="42" width="30" height="40" rx="2"/>
+          <rect class="bx" x="574" y="42" width="30" height="40" rx="2"/><rect class="bx" x="608" y="42" width="30" height="40" rx="2"/>
+          <rect class="bx" x="642" y="42" width="30" height="40" rx="2"/><rect class="bx" x="676" y="42" width="30" height="40" rx="2"/>
+          <text class="t-sm" x="605" y="94" text-anchor="middle">layers 25 – 32</text>
+
+          <line class="ln" x1="0" y1="126" x2="720" y2="126"/>
+          <text class="t-sm t-ink" x="0" y="148">all on GPU</text>
+          <rect class="bx-sig" x="150" y="136" width="480" height="14" rx="2"/>
+          <text class="t-lbl t-sig" x="640" y="148">fast</text>
+
+          <text class="t-sm t-ink" x="0" y="174">most on GPU</text>
+          <rect class="bx-sig" x="150" y="162" width="200" height="14" rx="2"/>
+          <text class="t-lbl" x="360" y="174">workable</text>
+
+          <text class="t-sm t-ink" x="0" y="200">none on GPU</text>
+          <rect class="bx" x="150" y="188" width="46" height="14" rx="2"/>
+          <text class="t-lbl" x="206" y="200">slow, but it runs</text>
+        </svg>
+        <figcaption>Speed falls off sharply once even a few layers spill to the CPU — <b>the slowest part sets the pace</b>.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ================= 08 ================= -->
+    <section class="step" id="s8">
+      <div class="eyebrow"><span class="n">08</span><span>Run it</span></div>
+      <h2>Your prompt, then one word at a time</h2>
+      <p>Two different jobs. Your prompt goes through <b>all at once</b> — that's a big batch of multiplications, and it's quick. Then the model produces output <b>one word per full pass</b>, and each pass has to wait for the one before it.</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 220" role="img" aria-label="Prompt processed in a single pass, then a repeating loop producing one word per pass.">
+          <text class="t-sm t-sig" x="0" y="14">your prompt</text>
+          <rect class="bx-sig" x="0" y="24" width="250" height="46" rx="3"/>
+          <text class="t-lbl t-ink" x="125" y="45" text-anchor="middle">all words together</text>
+          <text class="t-sm" x="125" y="61" text-anchor="middle">one pass · fast</text>
+
+          <path class="ln-sig" d="M 254 47 L 296 47 M 288 42 L 296 47 L 288 52"/>
+
+          <text class="t-sm t-brs" x="306" y="14">then, repeatedly</text>
+          <rect class="bx-brs" x="306" y="24" width="414" height="130" rx="3"/>
+
+          <rect class="bx" x="326" y="46" width="112" height="40" rx="2"/>
+          <text class="t-lbl t-ink" x="382" y="70" text-anchor="middle">one word in</text>
+
+          <path class="ln-brs" d="M 442 66 L 476 66 M 468 61 L 476 66 L 468 71"/>
+
+          <rect class="bx" x="480" y="46" width="112" height="40" rx="2"/>
+          <text class="t-lbl t-ink" x="536" y="64" text-anchor="middle">every layer</text>
+          <text class="t-sm" x="536" y="78" text-anchor="middle">reads all weights</text>
+
+          <path class="ln-brs" d="M 596 66 L 630 66 M 622 61 L 630 66 L 622 71"/>
+
+          <rect class="bx" x="634" y="46" width="66" height="40" rx="2"/>
+          <text class="t-lbl t-ink" x="667" y="70" text-anchor="middle">pick</text>
+
+          <path class="ln-brs" d="M 667 90 L 667 122 L 382 122 L 382 90 M 377 98 L 382 90 L 387 98"/>
+          <text class="t-sm t-brs" x="524" y="138" text-anchor="middle">the word just chosen becomes the next input</text>
+
+          <line class="ln" x1="0" y1="170" x2="720" y2="170"/>
+          <text class="t-sm t-sig" x="0" y="192">it also keeps a running scratchpad of the conversation so far</text>
+          <rect class="bx-sig" x="0" y="200" width="80" height="12" rx="2"/>
+          <rect class="bx-sig" x="84" y="200" width="140" height="12" rx="2"/>
+          <rect class="bx-sig" x="228" y="200" width="230" height="12" rx="2"/>
+          <rect class="bx-sig" x="462" y="200" width="258" height="12" rx="2"/>
+          <text class="t-sm" x="720" y="192" text-anchor="end">grows with every word — this is what eats your RAM later</text>
+        </svg>
+        <figcaption>The prompt is one pass. A 500-word reply is <b>500 more passes</b>, each reading the entire model again.</figcaption>
+      </figure>
+
+      <div class="take"><span>Why</span><span data-f="kvnote"></span></div>
+    </section>
+
+    <!-- ================= 09 ================= -->
+    <section class="step" id="s9">
+      <div class="eyebrow"><span class="n">09</span><span>Why it's fast</span></div>
+      <h2>It's a bandwidth problem</h2>
+      <p>Every word means reading <b>every weight in the model, once</b>. So the speed limit isn't how fast your chip multiplies — it's how fast it can pull bytes out of memory.</p>
+      <p>Cut the bytes by four and you get roughly four times the words per second. That's the whole reason the packing exists.</p>
+
+      <figure class="rise">
+        <svg viewBox="0 0 720 208" role="img" aria-label="Bar chart comparing bytes moved per word at full precision versus four-bit, and the resulting speeds.">
+          <text class="t-sm" x="0" y="14" data-f="bwtitle"></text>
+
+          <text class="t-lbl t-ink" x="0" y="48" data-f="bwlab1"></text>
+          <rect class="bx-brs" id="bwFull" x="150" y="32" width="460" height="26" rx="2"/>
+          <text class="t-lbl t-brs" id="bwFullT" x="622" y="50"></text>
+
+          <text class="t-lbl t-ink" x="0" y="90" data-f="bwlab2"></text>
+          <rect class="bx-sig" id="bwQ4" x="150" y="74" width="140" height="26" rx="2"/>
+          <text class="t-lbl t-sig" id="bwQ4T" x="302" y="92"></text>
+
+          <line class="ln" x1="0" y1="122" x2="720" y2="122"/>
+          <text class="t-sm" x="0" y="144">on a machine that moves ~400 GB every second</text>
+
+          <text class="t-lbl t-ink" x="0" y="176" data-f="bwlab3"></text>
+          <rect class="bx-brs" id="spFull" x="150" y="160" width="80" height="22" rx="2"/>
+          <text class="t-lbl t-brs" id="spFullT" x="242" y="177"></text>
+
+          <text class="t-lbl t-ink" x="0" y="202" data-f="bwlab4"></text>
+          <rect class="bx-sig" id="spQ4" x="150" y="186" width="300" height="22" rx="2"/>
+          <text class="t-lbl t-sig" id="spQ4T" x="462" y="203"></text>
+        </svg>
+        <figcaption data-f="bwcap"></figcaption>
+      </figure>
+
+      <div class="take"><span>Rule</span><span>If the model fits in your fastest memory, it runs well. If it spills, it crawls. That single fact explains most of what you'll read about picking a model size.</span></div>
+    </section>
+
+    <!-- ================= CHEAT SHEET ================= -->
+    <section class="step" id="sheet">
+      <div class="eyebrow"><span class="n">↓</span><span>Filenames, decoded</span></div>
+      <h2>What the suffixes mean</h2>
+      <p>Downloads come with names like <code>model-Q4_K_M.gguf</code>. The suffix is just the packing recipe.</p>
+
+      <div class="sheet-wrap">
+        <table class="sheet">
+          <thead>
+            <tr><th>Suffix</th><th>In plain terms</th><th>Size of a 16 GB model</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Q8_0</td><td>Barely squeezed. No visible quality loss, little to gain.</td><td>8.5 GB</td></tr>
+            <tr><td>Q6_K</td><td>Safe. Use if it fits comfortably.</td><td>6.6 GB</td></tr>
+            <tr><td>Q5_K_M</td><td>Slightly better than Q4, slightly bigger.</td><td>5.7 GB</td></tr>
+            <tr><td>Q4_K_M</td><td><b>The default choice.</b> Best size-to-quality trade.</td><td>4.9 GB</td></tr>
+            <tr><td>Q3_K_M</td><td>Noticeably rougher. Only when memory is tight.</td><td>3.8 GB</td></tr>
+            <tr><td>IQ2 / Q2_K</td><td>Last resort. The model starts making mistakes.</td><td>2.9 GB</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="take"><span>Short</span><span>Take the largest one that fits entirely in your GPU memory, or in RAM if you have no GPU. Nine times out of ten that's Q4_K_M.</span></div>
+    </section>
+
+
+    <!-- ================= PART TWO ================= -->
+    <section class="partbreak p2" id="part2">
+      <div class="plabel">Part two</div>
+      <h2>Inside two real files</h2>
+      <p class="lede">Everything above is how the format works. This is what is actually in
+      two real downloads — read out of their bytes, nothing estimated.</p>
+      <div class="nofile" id="nofile" hidden>
+        <p>No byte-level teardown for <b id="nofileName"></b>. Only two files were parsed:
+        <b>Gemma 4 12B</b> at Q4_K_M and the full original <b>Kimi K3</b> — picking either
+        from the bar above fills this section in.</p>
+        <p>Everything in part one still reflects your selection; it is derived from that
+        model's own config rather than from a downloaded file.</p>
+        <p><button type="button" id="nofileSwitch">Show the Gemma 4 12B teardown</button></p>
+      </div>
+    </section>
+<section class="step" id="sec-pick">
+  <h2>Now pick a file</h2>
+  <p class="lead">Both are real downloads. Everything after this point was read out of the bytes of the one you choose.</p>
+  <div class="filepicker">
+    <h1 id="fname" style="font-size:clamp(1.05rem,3vw,1.5rem);margin-bottom:var(--s3)"></h1>
+    <div class="hexblock" id="hexb"></div>
+    <div class="stats" id="statgrid"></div>
+    <div class="callout" id="origCallout" hidden></div>
+  </div>
+</section>
+
+
+<section class="step" id="sec-zoom">
+  <h2>Start here — the file in three steps</h2>
+  <p class="lead">A 1.56 TB file sounds unmanageable. It isn't, because <b>it is one shape repeated 93 times</b>, and each copy is almost entirely one thing.</p>
+  <div class="panel" id="zoomPanel"></div>
+</section>
+
+<section class="step" id="sec-anatomy">
+  <h2>One layer, by size</h2>
+  <p class="lead">Twenty-nine tensors — but three of them are <b>92.5%</b> of the layer. Everything else is plumbing around them.</p>
+  <div class="panel">
+    <div class="anat" id="anatTop"></div>
+    <div class="anatcap"><span>the 896 experts — 3 tensors</span><span>everything else — 26 tensors</span></div>
+    <div class="vdown">↓ the remaining 7.5%, expanded</div>
+    <div class="anat" id="anatBot" style="margin-top:6px"></div>
+    <div class="rows" id="anatRows" style="margin-top:var(--s3)"></div>
+    <p class="note" id="anatNote"></p>
+  </div>
+</section>
+
+<section class="step" id="sec-experts">
+  <h2>Only 16 of 896 run</h2>
+  <p class="lead">This is why the file is usable. Every layer holds 896 experts, but the router picks <b>16</b> for each word. The other 880 are never read.</p>
+  <div class="panel">
+    <div class="dots" id="dotGrid"></div>
+    <div class="legend"><span><i style="background:var(--brass)"></i>read for this word <b>16</b></span><span><i style="background:var(--rule);opacity:.55"></i>skipped <b>880</b></span></div>
+    <div class="rows" id="expRows" style="margin-top:var(--s3)"></div>
+    <p class="note" id="expNote"></p>
+  </div>
+</section>
+
+<section class="step" id="sec-attncmp">
+  <h2>Two kinds of attention</h2>
+  <p class="lead">The layers differ in exactly one way: how they remember what came before. That single choice is why a million-word context is affordable.</p>
+  <div class="panel">
+    <table class="cmp" id="cmpTbl"></table>
+    <p class="note">The linear layers carry no growing cache at all — their memory is a fixed-size summary that is rewritten, not appended to. Only the 24 ordinary layers pay per word.</p>
+  </div>
+</section>
+
+<section class="step" id="sec-strip">
+  <h2>The 93 layers</h2>
+  <p class="lead">Every layer in order. One dense layer to start, then the pattern repeats without variation to the end.</p>
+  <div class="panel">
+    <div class="kstrip" id="kstrip"></div>
+    <div class="legend" style="margin-top:var(--s3)">
+      <span><i style="background:var(--ink)"></i>dense · no experts <b>1</b></span>
+      <span><i style="background:var(--signal-dim);border:1px solid var(--signal)"></i>linear attention <b>68</b></span>
+      <span><i style="background:var(--brass)"></i>full attention <b>24</b></span>
+    </div>
+    <p class="note">Sizes are identical within each kind, to the byte — 68 layers of <b>17.00 GB</b> and 24 of <b>16.58 GB</b>.</p>
+  </div>
+</section>
+
+<section class="step divider" id="sec-RAW">
+  <h2>The raw records</h2>
+  <p class="lead">Everything below is the unedited contents of the file — byte offsets, tensor names and storage types, exactly as parsed.</p>
+</section>
+
+
+<section class="step" id="sec-shards">
+  <h2>Four files, not one</h2>
+  <p class="lead">A 1.5 TB download does not arrive as a single file. It is split into <b>four shards</b>, and they are not equal — three carry nothing but experts, and the fourth carries everything else.</p>
+  <div class="panel">
+    <div class="shbar" id="shBar"></div>
+    <div class="zoomnote"><span>relative size, true scale</span><span id="shTotal"></span></div>
+    <div class="tscroll"><table class="sht" id="shTbl"></table></div>
+    <p class="note" id="shNote"></p>
+    <p class="note" id="shCheck"></p>
+  </div>
+</section>
+
+<section class="step" id="sec-regions">
+  <h2>1 · The regions</h2>
+  <p class="lead" id="regLead"></p>
+  <div class="panel">
+    <h3>Zoomed — the header, metadata and index</h3>
+    <div class="regions" id="regZoom"></div>
+    <div class="zoomnote"><span>byte 0</span><span id="regZoomEnd"></span></div>
+    <h3 style="margin-top:var(--s3)">True scale — the whole file</h3>
+    <div class="regions" id="regTrue"></div>
+    <div class="zoomnote"><span>byte 0</span><span id="regTrueEnd"></span></div>
+    <div class="legend" id="regLegend"></div>
+  </div>
+</section>
+
+<section class="step" id="sec-meta">
+  <h2>2 · What the metadata actually is</h2>
+  <p class="lead">Not settings — <b>vocabulary</b>. The shape and rope parameters that define the whole network take a few hundred bytes between them. The tokenizer takes everything else.</p>
+  <div class="panel">
+    <div class="rows" id="metaRows"></div>
+    <p class="note" id="metaNote"></p>
+  </div>
+</section>
+
+<section class="step" id="sec-entry">
+  <h2>3 · One index entry, byte for byte</h2>
+  <p class="lead" id="entryLead"></p>
+  <div class="panel">
+    <div class="bytes" id="entryBytes"></div>
+    <p class="note" id="entryNote"></p>
+  </div>
+</section>
+
+<section class="step" id="sec-layermap">
+  <h2>4 · The layer map</h2>
+  <p class="lead" id="mapLead"></p>
+  <div class="panel">
+    <div class="lmap" id="layerMap"></div>
+    <div class="legend" id="mapLegend"></div>
+    <p class="note" id="layerNote"></p>
+  </div>
+</section>
+
+<section class="step" id="sec-kinds">
+  <h2>5 · The kinds of layer</h2>
+  <p class="lead" id="kindLead"></p>
+  <div class="two">
+    <div class="panel"><h3 id="kindAh"></h3><div class="tscroll"><table class="tt" id="tblA"></table></div></div>
+    <div class="panel"><h3 class="b" id="kindBh"></h3><div class="tscroll"><table class="tt" id="tblB"></table></div></div>
+  </div>
+  <div class="panel" style="margin-top:var(--s2)"><p class="note" id="kindNote"></p></div>
+</section>
+
+<section class="step" id="sec-promo">
+  <h2>6 · Where the extra bits went</h2>
+  <p class="lead" id="promoLead"></p>
+  <div class="panel" id="promoPanel"></div>
+</section>
+
+<section class="step" id="sec-totals">
+  <h2>7 · Adding it up</h2>
+  <p class="lead">Every tensor by storage type, and the file reassembled from its parts.</p>
+  <div class="panel">
+    <div class="rows" id="quantRows"></div>
+    <p class="note" id="quantNote"></p>
+  </div>
+  <div class="check"><span class="t">Checks</span><span class="d" id="closeNote"></span></div>
+</section>
+
+<section class="step" id="sec-ram">
+  <h2>8 · What is actually in RAM</h2>
+  <p class="lead">The weights are mapped, not loaded — they live in the page cache and are shared. What a process genuinely allocates is the scratchpad that grows with the conversation.</p>
+  <div class="panel">
+    <div class="rows" id="kvRows"></div>
+    <p class="note" id="kvNote"></p>
+    <p class="note warn" id="kvWarn"></p>
+  </div>
+</section>
+
+
+    <footer>
+      GGUF · the file format behind llama.cpp, Ollama and LM Studio — one file, memory-mapped, packed to 4 bits, read once per word.<br>
+      <span id="foot"></span>
+    </footer>
+
+  </main>
+</div>
+</div>
+
+<div class="gscrim" id="gscrim" hidden></div>
+<aside class="gpanel" id="gpanel" aria-label="Glossary" aria-hidden="true">
+  <div class="ghead">
+    <h3>Glossary</h3>
+    <button class="gclose" id="gclose" type="button" aria-label="Close glossary">✕</button>
+  </div>
+  <div class="gterm" id="g-tensor">
+    <div class="gt">tensor</div>
+    <div class="gd">A named block of numbers with a shape. Not a physics concept — a model
+      file is a few hundred of them end to end, and nothing else. The numbers inside are the
+      <b>weights</b>, or parameters: what the model learned.</div>
+  </div>
+  <div class="tensorbox">
+      <div class="tcard">
+        <h4>1 dimension — a list</h4>
+        <svg viewBox="0 0 200 46" role="img" aria-label="A single row of eight cells.">
+          <g fill="var(--signal-dim)" stroke="var(--signal)">
+            <rect x="1" y="14" width="22" height="22" rx="2"/><rect x="25" y="14" width="22" height="22" rx="2"/>
+            <rect x="49" y="14" width="22" height="22" rx="2"/><rect x="73" y="14" width="22" height="22" rx="2"/>
+            <rect x="97" y="14" width="22" height="22" rx="2"/><rect x="121" y="14" width="22" height="22" rx="2"/>
+            <rect x="145" y="14" width="22" height="22" rx="2"/><rect x="169" y="14" width="22" height="22" rx="2"/>
+          </g>
+        </svg>
+        <p><code>output_norm.weight</code> is <b>3 840</b> numbers in a row. Shape: <b>3840</b>.</p>
+      </div>
+      <div class="tcard">
+        <h4>2 dimensions — a table</h4>
+        <svg viewBox="0 0 200 46" role="img" aria-label="A grid of cells, eight across and four down.">
+          <g fill="var(--signal-dim)" stroke="var(--signal)"></g>
+          <g id="grid2"></g>
+        </svg>
+        <p><code>attn_q.weight</code> is <b>3840 × 4096</b> — a table of 15.7 million numbers. Most tensors look like this.</p>
+      </div>
+      <div class="tcard">
+        <h4>3 dimensions — a stack</h4>
+        <svg viewBox="0 0 200 46" role="img" aria-label="Three offset grids stacked behind each other."><g id="grid3"></g></svg>
+        <p><code>ffn_gate_exps.weight</code> is <b>3584 × 3072 × 896</b> — 896 tables in one tensor. This is how Kimi stores its experts.</p>
+      </div>
+    </div>
+  <div class="gloss">
+      <div class="gterm"><div class="gt">shape</div><div class="gd">How many rows, columns and sheets a tensor has. Multiply them for the number of weights.</div><span class="gx">3840 × 4096 = 15.7 million weights</span></div>
+      <div class="gterm"><div class="gt">token</div><div class="gd">A chunk of text. Models never see letters or words — text is cut into tokens and each becomes a number. Roughly 4 characters each.</div><span class="gx">"understanding" → under · stand · ing</span></div>
+      <div class="gterm"><div class="gt">vocabulary</div><div class="gd">The full list of tokens a model knows, stored in the file as plain text.</div><span class="gx">Gemma 262 144 · Kimi 163 840</span></div>
+      <div class="gterm"><div class="gt">layer &nbsp;<span style="opacity:.6">(or block)</span></div><div class="gd">One repeating stage of the model. Each layer's output feeds the next. Every layer holds the same kinds of tensor, just with its own numbers.</div><span class="gx">Gemma 48 layers · Kimi 93</span></div>
+      <div class="gterm"><div class="gt">attention</div><div class="gd">The part of a layer that looks back at earlier tokens to decide what matters. Its tensors are named <code>attn_*</code>.</div><span class="gx">≈ 20% of the Gemma file</span></div>
+      <div class="gterm"><div class="gt">feed-forward</div><div class="gd">The part that does the bulk of the transforming, one token at a time. Named <code>ffn_*</code>. Usually the biggest thing in the file.</div><span class="gx">≈ 72% of the Gemma file</span></div>
+      <div class="gterm"><div class="gt">norm</div><div class="gd">Tiny tensors that keep numbers from growing or shrinking out of range between stages. Thousands of values, not millions.</div><span class="gx">15 360 bytes each</span></div>
+      <div class="gterm"><div class="gt">quantization</div><div class="gd">Storing each weight in fewer bits — rounding it onto a coarse grid to shrink the file. "Q4" means about 4 bits per weight instead of 16.</div><span class="gx">16 bits → 4 bits = 4× smaller</span></div>
+      <div class="gterm"><div class="gt">expert &nbsp;<span style="opacity:.6">(mixture of experts)</span></div><div class="gd">Instead of one feed-forward block per layer, many alternatives. Only a few run for any given token, so a huge model stays affordable.</div><span class="gx">Kimi: 896 per layer, 16 run</span></div>
+      <div class="gterm"><div class="gt">router</div><div class="gd">The small tensor that decides which experts handle the current token.</div><span class="gx">25.7 MB of a 17 GB layer</span></div>
+      <div class="gterm"><div class="gt">context</div><div class="gd">How many tokens the model can hold in mind at once.</div><span class="gx">Gemma 256K · Kimi 1M</span></div>
+      <div class="gterm"><div class="gt">KV cache</div><div class="gd">The running scratchpad of the conversation so far. Not in the file — memory your process allocates, and it grows with every token.</div><span class="gx">the thing that fills your RAM</span></div>
+      <div class="gterm"><div class="gt">offset</div><div class="gd">The byte position where a tensor's numbers begin. The file lists one per tensor, so anything can be found by arithmetic.</div><span class="gx">@ 0x21C04000</span></div>
+      <div class="gterm"><div class="gt">mmap</div><div class="gd">Handing the file to the operating system as an address range instead of copying it into memory. Why a 20 GB model opens instantly.</div><span class="gx">no read, no parse</span></div>
+    </div>
+</aside>
+<button class="gopen" id="gopen" type="button" aria-controls="gpanel" aria-expanded="false">Glossary</button>
+
+
+<script>(function(){
+
+var F = {"gemma":{"id":"gemma","tab":"Gemma 4 12B","tabsub":"Q4_K_M \u00b7 7.12 GB \u00b7 ordinary","name":"gemma-4-12b-it-Q4_K_M.gguf","arch":"gemma4","ver":3,"nt":667,"nkv":58,"shards":1,"hex":[["47 47 55 46","GGUF","m"],["03 00 00 00","version 3","h"],["9b 02 00 00 00 00 00 00","667 tensors","n"],["3a 00 00 00 00 00 00 00","58 keys","h"]],"metaBytes":15784310,"indexBytes":39857,"dataStart":15824192,"tensorBytes":7106035904,"fileBytes":7121860096,"meta":[{"k":"tokenizer.ggml.merges","b":9251764},{"k":"tokenizer.ggml.tokens","b":4413492},{"k":"tokenizer.ggml.token_type","b":1048625},{"k":"tokenizer.ggml.scores","b":1048621},{"k":"tokenizer.chat_template","b":18967}],"metaRest":2841,"entry":{"g":[{"l":"name length","v":"18","g":"g1","b":["12","00","00","00","00","00","00","00"]},{"l":"name (18 bytes)","v":"output_norm.weight","g":"","b":["6f","75","74","70","75","74","5f","6e","6f","72","6d","2e","77","65","69","67","68","74"]},{"l":"dim count","v":"1","g":"g2","b":["01","00","00","00"]},{"l":"dim 0","v":"3840","g":"g1","b":["00","0f","00","00","00","00","00","00"]},{"l":"type","v":"0 = F32","g":"g2","b":["00","00","00","00"]},{"l":"offset into data","v":"0","g":"g1","b":["00","00","00","00","00","00","00","00"]}],"len":50},"stats":[["Architecture","gemma4"],["Tensors","667"],["Metadata keys","58"],["Layers","48"],["Shards","1"],["File size","7.12 <small>GB</small>"]],"segs":[["attention","var(--signal)",1],["feed-forward","var(--brass)",1],["norms & scales","var(--f32)",1]],"layers":[{"i":0,"k":"local","n":14,"b":143372292,"o":566247424,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":1,"k":"local","n":14,"b":143372292,"o":709619744,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":2,"k":"local","n":14,"b":143372292,"o":852992064,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":3,"k":"local","n":14,"b":143372292,"o":996364384,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":4,"k":"local","n":14,"b":143372292,"o":1139736704,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":5,"k":"global","n":13,"b":151300100,"o":1283109024,"s":[36514816,114754560,30724],"v6":false,"d6":true},{"i":6,"k":"local","n":14,"b":126138372,"o":1434409152,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":7,"k":"local","n":14,"b":126138372,"o":1560547552,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":8,"k":"local","n":14,"b":143372292,"o":1686685952,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":9,"k":"local","n":14,"b":126138372,"o":1830058272,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":10,"k":"local","n":14,"b":126138372,"o":1956196672,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":11,"k":"global","n":13,"b":151300100,"o":2082335072,"s":[36514816,114754560,30724],"v6":false,"d6":true},{"i":12,"k":"local","n":14,"b":128165892,"o":2233635200,"s":[28587008,99548160,30724],"v6":true,"d6":false},{"i":13,"k":"local","n":14,"b":126138372,"o":2361801120,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":14,"k":"local","n":14,"b":141344772,"o":2487939520,"s":[26559488,114754560,30724],"v6":false,"d6":true},{"i":15,"k":"local","n":14,"b":128165892,"o":2629284320,"s":[28587008,99548160,30724],"v6":true,"d6":false},{"i":16,"k":"local","n":14,"b":126138372,"o":2757450240,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":17,"k":"global","n":13,"b":151300100,"o":2883588640,"s":[36514816,114754560,30724],"v6":false,"d6":true},{"i":18,"k":"local","n":14,"b":126138372,"o":3034888768,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":19,"k":"local","n":14,"b":128165892,"o":3161027168,"s":[28587008,99548160,30724],"v6":true,"d6":false},{"i":20,"k":"local","n":14,"b":141344772,"o":3289193088,"s":[26559488,114754560,30724],"v6":false,"d6":true},{"i":21,"k":"local","n":14,"b":126138372,"o":3430537888,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":22,"k":"local","n":14,"b":128165892,"o":3556676288,"s":[28587008,99548160,30724],"v6":true,"d6":false},{"i":23,"k":"global","n":13,"b":151300100,"o":3684842208,"s":[36514816,114754560,30724],"v6":false,"d6":true},{"i":24,"k":"local","n":14,"b":126138372,"o":3836142336,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":25,"k":"local","n":14,"b":126138372,"o":3962280736,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":26,"k":"local","n":14,"b":143372292,"o":4088419136,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":27,"k":"local","n":14,"b":126138372,"o":4231791456,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":28,"k":"local","n":14,"b":126138372,"o":4357929856,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":29,"k":"global","n":13,"b":151300100,"o":4484068256,"s":[36514816,114754560,30724],"v6":false,"d6":true},{"i":30,"k":"local","n":14,"b":128165892,"o":4635368384,"s":[28587008,99548160,30724],"v6":true,"d6":false},{"i":31,"k":"local","n":14,"b":126138372,"o":4763534304,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":32,"k":"local","n":14,"b":141344772,"o":4889672704,"s":[26559488,114754560,30724],"v6":false,"d6":true},{"i":33,"k":"local","n":14,"b":128165892,"o":5031017504,"s":[28587008,99548160,30724],"v6":true,"d6":false},{"i":34,"k":"local","n":14,"b":126138372,"o":5159183424,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":35,"k":"global","n":13,"b":151300100,"o":5285321824,"s":[36514816,114754560,30724],"v6":false,"d6":true},{"i":36,"k":"local","n":14,"b":126138372,"o":5436621952,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":37,"k":"local","n":14,"b":128165892,"o":5562760352,"s":[28587008,99548160,30724],"v6":true,"d6":false},{"i":38,"k":"local","n":14,"b":141344772,"o":5690926272,"s":[26559488,114754560,30724],"v6":false,"d6":true},{"i":39,"k":"local","n":14,"b":126138372,"o":5832271072,"s":[26559488,99548160,30724],"v6":false,"d6":false},{"i":40,"k":"local","n":14,"b":128165892,"o":5958409472,"s":[28587008,99548160,30724],"v6":true,"d6":false},{"i":41,"k":"global","n":13,"b":151300100,"o":6086575392,"s":[36514816,114754560,30724],"v6":false,"d6":true},{"i":42,"k":"local","n":14,"b":143372292,"o":6237875520,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":43,"k":"local","n":14,"b":143372292,"o":6381247840,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":44,"k":"local","n":14,"b":143372292,"o":6524620160,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":45,"k":"local","n":14,"b":143372292,"o":6667992480,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":46,"k":"local","n":14,"b":143372292,"o":6811364800,"s":[28587008,114754560,30724],"v6":true,"d6":true},{"i":47,"k":"global","n":13,"b":151300100,"o":6954737120,"s":[36514816,114754560,30724],"v6":false,"d6":true}],"kindA":{"label":"blk.0 \u2014 local \u00b7 window 1024","t":[{"n":"attn_k.weight","d":[3840,2048],"t":"Q4_K","b":4423680},{"n":"attn_k_norm.weight","d":[256],"t":"F32","b":1024},{"n":"attn_norm.weight","d":[3840],"t":"F32","b":15360},{"n":"attn_output.weight","d":[4096,3840],"t":"Q4_K","b":8847360},{"n":"attn_q.weight","d":[3840,4096],"t":"Q4_K","b":8847360},{"n":"attn_q_norm.weight","d":[256],"t":"F32","b":1024},{"n":"attn_v.weight","d":[3840,2048],"t":"Q6_K","b":6451200},{"n":"ffn_down.weight","d":[15360,3840],"t":"Q6_K","b":48384000},{"n":"ffn_gate.weight","d":[3840,15360],"t":"Q4_K","b":33177600},{"n":"ffn_norm.weight","d":[3840],"t":"F32","b":15360},{"n":"ffn_up.weight","d":[3840,15360],"t":"Q4_K","b":33177600},{"n":"layer_output_scale.weight","d":[1],"t":"F32","b":4},{"n":"post_attention_norm.weight","d":[3840],"t":"F32","b":15360},{"n":"post_ffw_norm.weight","d":[3840],"t":"F32","b":15360}]},"kindB":{"label":"blk.5 \u2014 global \u00b7 full 256K","t":[{"n":"attn_k.weight","d":[3840,512],"t":"Q4_K","b":1105920},{"n":"attn_k_norm.weight","d":[512],"t":"F32","b":2048},{"n":"attn_norm.weight","d":[3840],"t":"F32","b":15360},{"n":"attn_output.weight","d":[8192,3840],"t":"Q4_K","b":17694720},{"n":"attn_q.weight","d":[3840,8192],"t":"Q4_K","b":17694720},{"n":"attn_q_norm.weight","d":[512],"t":"F32","b":2048},{"n":"ffn_down.weight","d":[15360,3840],"t":"Q6_K","b":48384000},{"n":"ffn_gate.weight","d":[3840,15360],"t":"Q4_K","b":33177600},{"n":"ffn_norm.weight","d":[3840],"t":"F32","b":15360},{"n":"ffn_up.weight","d":[3840,15360],"t":"Q4_K","b":33177600},{"n":"layer_output_scale.weight","d":[1],"t":"F32","b":4},{"n":"post_attention_norm.weight","d":[3840],"t":"F32","b":15360},{"n":"post_ffw_norm.weight","d":[3840],"t":"F32","b":15360}]},"kindNote":"The global layer <b>doubles the head width</b> \u2014 <code>attn_q</code> goes 3840\u00d74096 \u2192 3840\u00d78192 \u2014 but <b>cuts key-value heads from 8 to 1</b>: <code>attn_k</code> goes 3840\u00d72048 \u2192 3840\u00d7512. The layers that must remember everything are built to keep almost nothing per token.","quant":[{"t":"Q4_K","n":285,"b":5812715520},{"t":"Q6_K","n":44,"b":1290240000},{"t":"F32","n":338,"b":3080384}],"extra":[{"n":"output_norm.weight","d":[3840],"t":"F32","b":15360},{"n":"rope_freqs.weight","d":[256],"t":"F32","b":1024},{"n":"token_embd.weight","d":[3840,262144],"t":"Q4_K","b":566231040}],"promo":true,"kv":{"fixed":335544320,"per":16384,"ctx":[4096,32768,131072,262144],"note":"The 40 local layers cache <b>8 heads \u00d7 256</b> but only 1024 words \u2014 their share is <b>fixed at 336 MB no matter how long the conversation runs</b>. Only the 8 global layers grow, and they were cut to <b>1 head \u00d7 512</b> so they could afford to.","warn":"Computed from the shapes above at 16-bit, assuming keys and values are both stored at the global layers' width. The file records no value projection on those layers, so their true cost may be half of what is shown."},"close":"<b>7.11 GB</b> of tensors + <b>15.82 MB</b> of header, metadata and index = <b>7.122 GB</b>. Published size: <b>7.12 GB</b>.","sections":["regions","meta","entry","layermap","kinds","promo","totals","ram"]},"k3":{"id":"k3","tab":"Kimi K3","tabsub":"mxfp4 \u00b7 1.56 TB \u00b7 the strange one","name":"Kimi-K3-mxfp4-0000N-of-00004.gguf","arch":"kimi-k3","ver":3,"nt":2573,"nkv":50,"shards":4,"hex":[["47 47 55 46","GGUF","m"],["03 00 00 00","version 3","h"],["55 00 00 00 00 00 00 00","85 tensors in shard 1","n"],["32 00 00 00 00 00 00 00","50 keys","h"]],"metaBytes":6908615,"indexBytes":6292,"dataStart":6914944,"tensorBytes":1561150781824,"fileBytes":1561157853600,"meta":[{"k":"tokenizer.ggml.merges","b":3201710},{"k":"tokenizer.ggml.tokens","b":3049063},{"k":"tokenizer.ggml.token_type","b":655409},{"k":"kimi-k3.attention.head_count_kv","b":427},{"k":"general.tags","b":110}],"metaRest":1896,"entry":{"g":[{"l":"name length","v":"26","g":"g1","b":["1a","00","00","00","00","00","00","00"]},{"l":"name (26 bytes)","v":"blk.1.ffn_gate_exps.weight","g":"","b":["62","6c","6b","2e","31","2e","66","66","6e","5f","67","61","74","65","5f","65","78","70","73","2e","77","65","69","67","68","74"]},{"l":"dim count","v":"3","g":"g2","b":["03","00","00","00"]},{"l":"dim 0","v":"3584","g":"g1","b":["00","0e","00","00","00","00","00","00"]},{"l":"dim 1","v":"3072","g":"g1","b":["00","0c","00","00","00","00","00","00"]},{"l":"dim 2","v":"896","g":"g1","b":["80","03","00","00","00","00","00","00"]},{"l":"type","v":"39 = MXFP4","g":"g2","b":["27","00","00","00"]},{"l":"offset into data","v":"0","g":"g1","b":["00","00","00","00","00","00","00","00"]}],"len":74},"stats":[["Architecture","kimi-k3"],["Tensors","2 573"],["Metadata keys","50"],["Layers","93"],["Shards","4"],["Total size","1.56 <small>TB</small>"]],"segs":[["attention","var(--signal)",1],["experts (\u00d7896)","var(--brass)",1],["shared experts","var(--brass)",0.5],["feed-forward & routing","var(--signal)",0.5],["norms & misc","var(--f32)",1]],"layers":[{"i":0,"k":"dense","n":21,"b":2341241728,"sh":4,"s":[887858048,0,0,1453326336,57344]},{"i":1,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":2,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":3,"k":"full","n":24,"b":16579569152,"sh":1,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":4,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":5,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":6,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":7,"k":"full","n":24,"b":16579569152,"sh":1,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":8,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":9,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":10,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":11,"k":"full","n":24,"b":16579569152,"sh":1,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":12,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":13,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":14,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":15,"k":"full","n":24,"b":16579569152,"sh":1,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":16,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":17,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":18,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":19,"k":"full","n":24,"b":16579569152,"sh":1,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":20,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":21,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":22,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":23,"k":"full","n":24,"b":16579569152,"sh":1,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":24,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":25,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":26,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":27,"k":"full","n":24,"b":16579569152,"sh":1,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":28,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":29,"k":"kda","n":29,"b":17002973568,"sh":1,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":30,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":31,"k":"full","n":24,"b":16579569152,"sh":2,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":32,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":33,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":34,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":35,"k":"full","n":24,"b":16579569152,"sh":2,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":36,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":37,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":38,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":39,"k":"full","n":24,"b":16579569152,"sh":2,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":40,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":41,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":42,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":43,"k":"full","n":24,"b":16579569152,"sh":2,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":44,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":45,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":46,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":47,"k":"full","n":24,"b":16579569152,"sh":2,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":48,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":49,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":50,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":51,"k":"full","n":24,"b":16579569152,"sh":2,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":52,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":53,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":54,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":55,"k":"full","n":24,"b":16579569152,"sh":2,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":56,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":57,"k":"kda","n":29,"b":17002973568,"sh":2,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":58,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":59,"k":"full","n":24,"b":16579569152,"sh":3,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":60,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":61,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":62,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":63,"k":"full","n":24,"b":16579569152,"sh":3,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":64,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":65,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":66,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":67,"k":"full","n":24,"b":16579569152,"sh":3,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":68,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":69,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":70,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":71,"k":"full","n":24,"b":16579569152,"sh":3,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":72,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":73,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":74,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":75,"k":"full","n":24,"b":16579569152,"sh":3,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":76,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":77,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":78,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":79,"k":"full","n":24,"b":16579569152,"sh":3,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":80,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":81,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":82,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":83,"k":"full","n":24,"b":16579569152,"sh":3,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":84,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":85,"k":"kda","n":29,"b":17002973568,"sh":3,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":86,"k":"kda","n":29,"b":17002973568,"sh":4,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":87,"k":"full","n":24,"b":16579569152,"sh":4,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":88,"k":"kda","n":29,"b":17002973568,"sh":4,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":89,"k":"kda","n":29,"b":17002973568,"sh":4,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":90,"k":"kda","n":29,"b":17002973568,"sh":4,"s":[887858048,15722348544,264241152,128468480,57344]},{"i":91,"k":"full","n":24,"b":16579569152,"sh":4,"s":[464453632,15722348544,264241152,128468480,57344]},{"i":92,"k":"full","n":24,"b":16579569152,"sh":4,"s":[464453632,15722348544,264241152,128468480,57344]}],"shardTable":[{"s":1,"nt":85,"nkv":50,"hdr":24,"meta":6908615,"index":6292,"front":6914931,"data":445466542080,"file":445473457024,"holds":"the 896-expert tensors for layers 1\u201329,<br>plus the tokenizer and all model settings"},{"s":2,"nt":85,"nkv":3,"hdr":24,"meta":82,"index":6319,"front":6425,"data":445466542080,"file":445466548512,"holds":"the 896-expert tensors for layers 29\u201357"},{"s":3,"nt":85,"nkv":3,"hdr":24,"meta":82,"index":6317,"front":6423,"data":445466542080,"file":445466548512,"holds":"the 896-expert tensors for layers 57\u201385"},{"s":4,"nt":2318,"nkv":3,"hdr":24,"meta":82,"index":143833,"front":143939,"data":224751155584,"file":224751299552,"holds":"everything else \u2014 attention, norms and the<br>vocabulary table, for all 93 layers"}],"shardTotal":1561157853600,"anatomy":{"total":17002973568,"rows":[{"l":"The 896 experts","n":3,"b":15722348544},{"l":"Attention","n":6,"b":704700416},{"l":"Shared expert \u00b7 always runs","n":3,"b":264241152},{"l":"Linear-attention machinery","n":10,"b":183157632},{"l":"Expert in / out projection","n":3,"b":102774784},{"l":"Router \u00b7 picks the 16","n":2,"b":25693696},{"l":"Norms","n":2,"b":57344}],"expB":15722348544,"restB":1280625024},"expert":{"used":16,"total":896,"stored":1561150781824,"read":140524288384.0,"params":2779483135584,"activeParams":105362677344.0,"expParams":2722740830208},"strip":["dense","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","kda","kda","kda","full","full"],"ladder":[["UD-IQ1_S",593.997933024],["UD-IQ1_M",648.872012448],["UD-IQ2_XXS",711.067773664],["UD-Q2_K_XL",861.277858912],["UD-Q4_K_XL",1508.668683104],["UD-Q8_K_XL",1561.157884384],["mxfp4 (original)",1561.1578536]],"attncmp":[["how many layers","68 of 93","24 of 93"],["what it remembers","a fixed-size summary","every word, compressed"],["cache per word","nothing \u2014 size never changes","1 152 bytes"],["at 1 million words","0 GB","29 GB"],["cost per layer","17.00 GB","16.58 GB"]],"kindA":{"label":"blk.1 \u2014 KDA linear attention + 896 experts","t":[{"n":"ffn_gate_exps.weight","d":[3584,3072,896],"t":"MXFP4","b":5240782848},{"n":"ffn_down_exps.weight","d":[3072,3584,896],"t":"MXFP4","b":5240782848},{"n":"ffn_up_exps.weight","d":[3584,3072,896],"t":"MXFP4","b":5240782848},{"n":"exp_probs_b.bias","d":[896],"t":"F32","b":3584},{"n":"ffn_gate_inp.weight","d":[7168,896],"t":"F32","b":25690112},{"n":"ffn_routed_down.weight","d":[7168,3584],"t":"BF16","b":51380224},{"n":"ffn_routed_norm.weight","d":[3584],"t":"F32","b":14336},{"n":"ffn_routed_up.weight","d":[3584,7168],"t":"BF16","b":51380224},{"n":"ffn_down_shexp.weight","d":[6144,7168],"t":"BF16","b":88080384},{"n":"ffn_gate_shexp.weight","d":[7168,6144],"t":"BF16","b":88080384},{"n":"ffn_up_shexp.weight","d":[7168,6144],"t":"BF16","b":88080384},{"n":"attn_norm.weight","d":[7168],"t":"F32","b":28672},{"n":"ffn_res_score.weight","d":[7168],"t":"F32","b":28672},{"n":"ffn_norm.weight","d":[7168],"t":"F32","b":28672},{"n":"attn_res_score.weight","d":[7168],"t":"F32","b":28672},{"n":"ssm_a","d":[96],"t":"F32","b":384},{"n":"ssm_beta.weight","d":[7168,96],"t":"BF16","b":1376256},{"n":"ssm_dt.bias","d":[12288],"t":"F32","b":49152},{"n":"ssm_f_a.weight","d":[7168,128],"t":"BF16","b":1835008},{"n":"ssm_f_b.weight","d":[128,12288],"t":"BF16","b":3145728},{"n":"ssm_g.weight","d":[7168,12288],"t":"BF16","b":176160768},{"n":"ssm_conv1d_k.weight","d":[4,1,12288],"t":"F32","b":196608},{"n":"attn_k.weight","d":[7168,12288],"t":"BF16","b":176160768},{"n":"ssm_norm.weight","d":[128],"t":"F32","b":512},{"n":"attn_output.weight","d":[12288,7168],"t":"BF16","b":176160768},{"n":"ssm_conv1d_q.weight","d":[4,1,12288],"t":"F32","b":196608},{"n":"attn_q.weight","d":[7168,12288],"t":"BF16","b":176160768},{"n":"ssm_conv1d_v.weight","d":[4,1,12288],"t":"F32","b":196608},{"n":"attn_v.weight","d":[7168,12288],"t":"BF16","b":176160768}]},"kindB":{"label":"blk.3 \u2014 full attention (MLA) + 896 experts","t":[{"n":"ffn_gate_exps.weight","d":[3584,3072,896],"t":"MXFP4","b":5240782848},{"n":"ffn_down_exps.weight","d":[3072,3584,896],"t":"MXFP4","b":5240782848},{"n":"ffn_up_exps.weight","d":[3584,3072,896],"t":"MXFP4","b":5240782848},{"n":"exp_probs_b.bias","d":[896],"t":"F32","b":3584},{"n":"ffn_gate_inp.weight","d":[7168,896],"t":"F32","b":25690112},{"n":"ffn_routed_down.weight","d":[7168,3584],"t":"BF16","b":51380224},{"n":"ffn_routed_norm.weight","d":[3584],"t":"F32","b":14336},{"n":"ffn_routed_up.weight","d":[3584,7168],"t":"BF16","b":51380224},{"n":"ffn_down_shexp.weight","d":[6144,7168],"t":"BF16","b":88080384},{"n":"ffn_gate_shexp.weight","d":[7168,6144],"t":"BF16","b":88080384},{"n":"ffn_up_shexp.weight","d":[7168,6144],"t":"BF16","b":88080384},{"n":"attn_norm.weight","d":[7168],"t":"F32","b":28672},{"n":"ffn_res_score.weight","d":[7168],"t":"F32","b":28672},{"n":"ffn_norm.weight","d":[7168],"t":"F32","b":28672},{"n":"attn_res_score.weight","d":[7168],"t":"F32","b":28672},{"n":"attn_gate.weight","d":[7168,12288],"t":"BF16","b":176160768},{"n":"attn_kv_a_norm.weight","d":[512],"t":"F32","b":2048},{"n":"attn_kv_a_mqa.weight","d":[7168,576],"t":"BF16","b":8257536},{"n":"attn_k_b.weight","d":[128,512,96],"t":"BF16","b":12582912},{"n":"attn_v_b.weight","d":[512,128,96],"t":"BF16","b":12582912},{"n":"attn_output.weight","d":[12288,7168],"t":"BF16","b":176160768},{"n":"attn_q_a_norm.weight","d":[1536],"t":"F32","b":6144},{"n":"attn_q_a.weight","d":[7168,1536],"t":"BF16","b":22020096},{"n":"attn_q_b.weight","d":[1536,18432],"t":"BF16","b":56623104}]},"kindNote":"Only <b>24 of 93</b> layers use ordinary attention; the other 68 use a linear variant with no growing cache at all. And the attention tensors were <b>never quantized</b> \u2014 they are BF16 in a file that is otherwise 4-bit. Compare the two <code>attn</code> blocks: the KDA layer carries convolution and gate tensors instead of a key-value cache.","quant":[{"t":"MXFP4","n":276,"b":1446456066048},{"t":"BF16","n":1185,"b":112274505728},{"t":"F32","n":1112,"b":2420210048}],"extra":[{"n":"output.weight","d":[7168,163840],"t":"BF16","b":2348810240},{"n":"token_embd.weight","d":[7168,163840],"t":"BF16","b":2348810240},{"n":"output_norm.weight","d":[7168],"t":"F32","b":28672},{"n":"output_res_score.weight","d":[7168],"t":"F32","b":28672}],"promo":false,"roles":[{"r":"experts (\u00d7896, stacked)","n":276,"b":1446456066048},{"r":"attention","n":678,"b":59771215872},{"r":"shared experts","n":276,"b":24310185984},{"r":"linear-attention machinery","n":690,"b":12637876608},{"r":"expert in / out projection","n":276,"b":9455280128},{"r":"norms & misc","n":190,"b":4703010816},{"r":"router","n":184,"b":2363820032},{"r":"dense feed-forward (blk.0)","n":3,"b":1453326336}],"roleNote":"Attention was <b>deliberately left alone</b>. The quantizer config excludes <code>self_attn</code> and the shared experts by name \u2014 so in a file that is 92.65% 4-bit, the parts that route and attend stay at full 16-bit precision.","kv":{"fixed":217000000,"per":27648,"ctx":[4096,32768,262144,1048576],"note":"Only the <b>24 full-attention layers</b> cache anything that grows, and they compress it to a <b>576-value latent</b> per token instead of storing full keys and values. The other 68 layers hold a fixed-size state that never grows with the conversation.","warn":"Growing cache computed from key_length 576 at 16-bit across the 24 full-attention layers. The fixed 217 MB for the 69 linear layers is derived from head count and head dimension, not read from the file."},"close":"<b>1.561 TB</b> of tensors across 4 shards. Published total: <b>1.561 TB</b> \u2014 and the original safetensors release is <b>the same 1.561 TB</b>.","sections":["zoom","anatomy","experts","attncmp","ram","RAW","strip","shards","meta","entry","kinds","promo","totals"]}};
+var cur = "gemma";
+
+function n(x){return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g," ");}
+function sz(b){
+  if(b>=1e12)return (b/1e12).toFixed(3)+" TB";
+  if(b>=1e9) return (b/1e9).toFixed(2)+" GB";
+  if(b>=1e6) return (b/1e6).toFixed(2)+" MB";
+  if(b>=1e3) return (b/1e3).toFixed(b>=1e5?0:1)+" KB";
+  return n(b)+" B";
+}
+function hx(x){return "0x"+x.toString(16).toUpperCase();}
+function el(t,c,h){var e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;}
+function put(id,h){document.getElementById(id).innerHTML=h;}
+function clear(id){var e=document.getElementById(id);while(e.firstChild)e.removeChild(e.firstChild);return e;}
+
+function render(id){
+  var d=F[id]; cur=id;
+
+  /* hero */
+  var parts=d.name.split(/(?=-)/);
+  put("fname",'<span>'+d.name.replace(/\.gguf$/,'')+'</span>.gguf');
+  var hb=clear("hexb");
+  d.hex.forEach(function(h){
+    hb.appendChild(el("div","",'<span class="'+h[2]+'">'+h[0]+'</span> &nbsp;<em>'+h[1]+'</em>'));
+  });
+  var sg=clear("statgrid");
+  d.stats.forEach(function(s){
+    sg.appendChild(el("div","",'<div class="k">'+s[0]+'</div><div class="v">'+s[1]+'</div>'));
+  });
+
+  /* full-original callout */
+  var oc=document.getElementById("origCallout");
+  if(id==="k3"){
+    oc.hidden=false;
+    oc.innerHTML='<h3>About "the full original"</h3>'+
+      '<p>There is no full-precision Kimi K3 to download. Moonshot released it <b>already 4-bit</b> — the config declares <code>mxfp4-pack-quantized</code>, 4 bits at group size 32, with attention and shared experts held back at BF16. This file <b>is</b> the original.</p>'+
+      '<p>The proof is in the sizes: the original safetensors release is <b>1.561 TB</b>, and this mxfp4 GGUF is <b>1.561 TB</b>. Same bytes, different container. Both work out to <b>4.49 bits per parameter</b> across 2.78 trillion parameters.</p>'+
+      '<p>A GGUF advertised as "BF16" is an <b>upcast, not an upgrade</b> — it re-encodes 4-bit values into 16-bit slots and carries not one bit more information. The largest K3 GGUF published is this one; every other build is smaller.</p>';
+  } else { oc.hidden=true; oc.innerHTML=""; }
+
+  /* 1 regions */
+  var REG=[{n:"header",b:24,c:"var(--ink)"},{n:"metadata",b:d.metaBytes,c:"var(--signal)"},
+           {n:"index",b:d.indexBytes,c:"var(--brass)"},{n:"weights",b:d.tensorBytes,c:"var(--f32)"}];
+  var pctHdr=(d.dataStart/d.fileBytes*100);
+  put("regLead","The real boundaries. At true scale the first three regions are a hairline — "+
+      "<b>header, metadata and index together are "+pctHdr.toFixed(2)+"% of the file</b>"+
+      (d.shards>1?", and that is only shard 1 of "+d.shards:"")+".");
+  function draw(idz,total,list){
+    var h=clear(idz);
+    list.forEach(function(r){
+      var p=r.b/total*100, s=el("span","",p>8?r.n:"");
+      s.style.width=p+"%"; s.style.background=r.c; s.title=r.n+" · "+sz(r.b)+" ("+n(r.b)+" bytes)";
+      h.appendChild(s);
+    });
+  }
+  draw("regZoom",d.dataStart,REG.slice(0,3));
+  draw("regTrue",d.fileBytes,REG);
+  put("regZoomEnd",hx(d.dataStart)+" · "+sz(d.dataStart));
+  put("regTrueEnd",sz(d.fileBytes));
+  var lg=clear("regLegend");
+  REG.forEach(function(r){lg.appendChild(el("span","",'<i style="background:'+r.c+'"></i>'+r.n+' <b>'+sz(r.b)+'</b>'));});
+
+  /* 2 metadata */
+  var mr=clear("metaRows");
+  var rows=d.meta.concat([{k:"the other "+(d.nkv-d.meta.length)+" keys",b:d.metaRest}]);
+  var mx=Math.max.apply(null,rows.map(function(r){return r.b;}));
+  rows.forEach(function(r,i){
+    var row=el("div","row");
+    row.appendChild(el("span","rl",r.k.replace("tokenizer.ggml.","").replace("tokenizer.","")));
+    var b=el("span","bar"+(i>3?" b2":"")); b.style.width=Math.max(.4,r.b/mx*100)+"%";
+    var hold=el("span"); hold.appendChild(b); row.appendChild(hold);
+    row.appendChild(el("span","rv",sz(r.b)));
+    mr.appendChild(row);
+  });
+  put("metaNote", id==="gemma"
+    ? "The <b>merge rules</b> alone are 9.25 MB — 514 906 pair-joining rules. That single key is <b>1.3× larger than the whole vocabulary list</b> and 235× larger than the index describing all 667 weight tables."
+    : "Only <b>"+sz(d.metaBytes)+"</b> of metadata for a 1.56 TB model — a third of what the far smaller Gemma file carries, because K3's vocabulary is 163 840 entries against Gemma's 262 144.");
+
+  /* 3 entry */
+  put("entryLead", d.nt+" of these, back to back"+(d.shards>1?" — split across "+d.shards+" shards":"")+
+      ". Here is the first one in shard 1, exactly as it sits on disk.");
+  var eb=clear("entryBytes");
+  d.entry.g.forEach(function(g){
+    var box=el("div","bgroup "+g.g);
+    box.appendChild(el("div","lbl",g.l));
+    var r=el("div","row2");
+    g.b.forEach(function(x){r.appendChild(el("b","",x));});
+    box.appendChild(r); box.appendChild(el("div","val",g.v));
+    eb.appendChild(box);
+  });
+  put("entryNote", d.entry.len+" bytes: a length-prefixed name, the dimension count, the dimensions, the type tag, and <b>the offset into the data region</b>. That last field is the whole point — it is what makes the file mappable instead of parseable."+
+    (id==="k3"?" Note this tensor has <b>three</b> dimensions: 896 experts stacked into one table.":""));
+
+  /* 4 layer map */
+  put("mapLead", id==="gemma"
+    ? "All 48 layers at true relative scale. Two kinds, alternating on a fixed rhythm: <b>five local, then one global</b>. Pick any row for its exact bytes."
+    : "All 93 layers at true relative scale. <b>Layer 0 is dense</b>; every layer after it carries 896 experts. Every fourth layer uses ordinary attention, the rest use a linear variant.");
+  var lm=clear("layerMap");
+  var mx2=Math.max.apply(null,d.layers.map(function(l){return l.b;}));
+  var tot=d.layers.reduce(function(a,l){return a+l.b;},0);
+  var sums=d.segs.map(function(_,i){return d.layers.reduce(function(a,l){return a+(l.s[i]||0);},0);});
+  d.layers.forEach(function(l){
+    var row=el("div","lrow k-"+l.k);
+    row.setAttribute("role","button"); row.tabIndex=0;
+    row.appendChild(el("span","li",l.i));
+    row.appendChild(el("span","lb",l.k==="local"?"LOC":l.k==="global"?"GLB":l.k==="kda"?"KDA":l.k==="full"?"FULL":"DNS"));
+    var seg=el("div","seg");
+    d.segs.forEach(function(s,i){
+      var b=el("i"); b.style.width=((l.s[i]||0)/mx2*100)+"%";
+      b.style.background=s[1]; b.style.opacity=s[2]; seg.appendChild(b);
+    });
+    var hold=el("span"); hold.appendChild(seg); row.appendChild(hold);
+    row.appendChild(el("span","lv",sz(l.b)));
+    function pick(){
+      Array.prototype.forEach.call(lm.children,function(c){c.removeAttribute("aria-current");});
+      row.setAttribute("aria-current","true");
+      var bits=d.segs.map(function(s,i){return s[0]+" <b>"+sz(l.s[i]||0)+"</b>";}).join(" · ");
+      put("layerNote","<b>blk."+l.i+"</b> — "+l.k+" · "+l.n+" tensors · "+bits+
+        " · total <b>"+sz(l.b)+"</b>"+(l.o!=null?" · starts at <b>"+hx(l.o)+"</b>":"")+
+        (l.sh!=null?" · in <b>shard "+l.sh+"</b>":""));
+    }
+    row.addEventListener("click",pick);
+    row.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();pick();}});
+    lm.appendChild(row);
+  });
+  var ml=clear("mapLegend");
+  d.segs.forEach(function(s,i){
+    ml.appendChild(el("span","",'<i style="background:'+s[1]+';opacity:'+s[2]+'"></i>'+s[0]+' <b>'+sz(sums[i])+'</b>'));
+  });
+  lm.children[id==="gemma"?5:1].click();
+
+  /* 5 kinds */
+  put("kindLead", id==="gemma"
+    ? "Every tensor in each, with real shapes, types and sizes. The local layer has <b>14</b> tensors; the global layer has <b>13</b> — it carries no value projection at all."
+    : "Every tensor in each. Note the single stacked expert tensor of <b>5.24 GB</b> — one tensor here is 74% the size of the entire Gemma file.");
+  put("kindAh",d.kindA.label); put("kindBh",d.kindB.label);
+  function table(tid,list){
+    var t=clear(tid);
+    t.appendChild(el("thead","","<tr><th>tensor</th><th>shape</th><th>type</th><th class='r'>bytes</th></tr>"));
+    var tb=el("tbody");
+    list.forEach(function(x){
+      var tr=el("tr");
+      tr.appendChild(el("td","nm",x.n.replace(".weight","")));
+      tr.appendChild(el("td","dim",x.d.join(" × ")));
+      tr.appendChild(el("td","",'<span class="qt '+x.t+'">'+x.t+'</span>'));
+      var tdz=el("td","sz r",sz(x.b)); tdz.title=n(x.b)+" bytes"; tr.appendChild(tdz);
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+  }
+  table("tblA",d.kindA.t); table("tblB",d.kindB.t);
+  put("kindNote",d.kindNote);
+
+  /* 6 promo */
+  var pp=clear("promoPanel");
+  if(d.promo){
+    put("promoLead",'"Q4_K_M" is a recipe, not a uniform setting. <span class="num">44</span> of the 667 tensors were promoted to Q6_K — chosen using an importance matrix measured over 141 chunks of calibration text.');
+    [["ffn_down","d6"],["attn_v","v6"]].forEach(function(p){
+      var c=d.layers.filter(function(l){return l[p[1]];}).length;
+      pp.appendChild(el("div","striplbl",p[0]+" · promoted on "+c+" of "+d.layers.length+" layers"));
+      var s=el("div","strip");
+      d.layers.forEach(function(l){
+        var i=el("i"); if(l[p[1]])i.className="on";
+        i.title="blk."+l.i+(l[p[1]]?" — Q6_K":" — Q4_K"); s.appendChild(i);
+      });
+      pp.appendChild(s);
+    });
+    pp.appendChild(el("p","note","Both patterns cluster at <b>the front and the back</b> of the stack, thinning through the middle. First and last layers get the most protection; the middle is where compression is cheapest."));
+  } else {
+    put("promoLead","K3 was not quantized after the fact — it was <b>released this way</b>. The quantizer config names what to skip, and those parts sit in the file at full precision.");
+    var rr=el("div","rows");
+    var mxr=Math.max.apply(null,d.roles.map(function(r){return r.b;}));
+    d.roles.forEach(function(r){
+      var row=el("div","row");
+      row.appendChild(el("span","rl",r.r));
+      var b=el("span","bar"+(r.r.indexOf("attention")>=0||r.r.indexOf("shared")>=0?" b2":""));
+      b.style.width=Math.max(.4,r.b/mxr*100)+"%";
+      var hold=el("span"); hold.appendChild(b); row.appendChild(hold);
+      row.appendChild(el("span","rv",sz(r.b)));
+      rr.appendChild(row);
+    });
+    pp.appendChild(rr);
+    pp.appendChild(el("p","note",d.roleNote));
+  }
+
+  /* 7 totals */
+  var qr=clear("quantRows");
+  var qmx=d.quant[0].b;
+  var C={Q4_K:"var(--signal)",Q6_K:"var(--brass)",F32:"var(--f32)",MXFP4:"var(--signal)",BF16:"var(--brass)"};
+  d.quant.forEach(function(q){
+    var row=el("div","row");
+    row.appendChild(el("span","rl",q.t+" · "+n(q.n)+" tensors"));
+    var b=el("span","bar"); b.style.width=Math.max(.3,q.b/qmx*100)+"%"; b.style.background=C[q.t]||"var(--f32)";
+    var hold=el("span"); hold.appendChild(b); row.appendChild(hold);
+    row.appendChild(el("span","rv",sz(q.b)));
+    qr.appendChild(row);
+  });
+  put("quantNote", id==="gemma"
+    ? "Only <b>three</b> storage types in the whole file. The 338 F32 tensors are all norms and scales — <b>335 of the 667 tensors carry 0.04% of the bytes</b>, every one left at full precision."
+    : "Three types again, but the split is the story: <b>1 185 BF16 tensors</b> — all the attention — sit untouched inside a file that is otherwise 4-bit.");
+  put("closeNote",d.close+" The parse is complete — nothing unaccounted for.");
+
+  /* 8 kv */
+  var kr=clear("kvRows");
+  var kv=d.kv;
+  var vals=kv.ctx.map(function(c){return {l:(c>=1048576?"1M":(c/1024)+"K")+" words",b:kv.fixed+kv.per*c};});
+  var kmx=Math.max(vals[vals.length-1].b,d.tensorBytes);
+  vals.forEach(function(v){
+    var row=el("div","row");
+    row.appendChild(el("span","rl","context "+v.l));
+    var b=el("span","bar"); b.style.width=(v.b/kmx*100)+"%";
+    var hold=el("span"); hold.appendChild(b); row.appendChild(hold);
+    row.appendChild(el("span","rv",sz(v.b)));
+    kr.appendChild(row);
+  });
+  var row=el("div","row");
+  row.appendChild(el("span","rl","weights (mapped)"));
+  var b=el("span","bar b2"); b.style.width="100%";
+  var hold=el("span"); hold.appendChild(b); row.appendChild(hold);
+  row.appendChild(el("span","rv",sz(d.tensorBytes)));
+  kr.appendChild(row);
+  put("kvNote",kv.note); put("kvWarn",kv.warn);
+
+
+
+  /* ---- sharded file view ---- */
+  if(d.shardTable){
+    var ST=d.shardTable, TOT=d.shardTotal;
+    var PALS=["var(--brass)","var(--brass)","var(--brass)","var(--signal)"];
+    var OPS=[1,.75,.5,1];
+    var sb=clear("shBar");
+    ST.forEach(function(r,i){
+      var e=el("i","","shard "+r.s);
+      e.style.width=(r.file/TOT*100)+"%"; e.style.background=PALS[i]; e.style.opacity=OPS[i];
+      e.title="shard "+r.s+" — "+sz(r.file);
+      sb.appendChild(e);
+    });
+    put("shTotal",sz(TOT)+" across "+ST.length+" files");
+    var t=clear("shTbl");
+    t.appendChild(el("thead","","<tr><th>shard</th><th>holds</th><th class='r'>tensors</th>"+
+      "<th class='r'>settings</th><th class='r'>front matter</th><th class='r'>weights</th></tr>"));
+    var tb=el("tbody");
+    ST.forEach(function(r){
+      var tr=el("tr");
+      tr.appendChild(el("td","sn",r.s+" of "+ST.length));
+      tr.appendChild(el("td","sh-holds",r.holds));
+      tr.appendChild(el("td","r big",n(r.nt)));
+      tr.appendChild(el("td","r "+(r.nkv>3?"small":""),r.nkv+" keys"));
+      tr.appendChild(el("td","r "+(r.front>1e6?"small":""),sz(r.front)));
+      tr.appendChild(el("td","r big",sz(r.data)));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    put("shNote","Only <b>shard 1</b> carries the model's settings and its vocabulary — 50 keys and "+
+      sz(ST[0].meta)+". The other three hold <b>three keys and 82 bytes</b> between the header and the weights: "+
+      "which shard this is, how many there are, and how many tensors in total. Everything a program needs to reassemble them.");
+    put("shCheck","Header + settings + index + padding + weights, summed per shard, comes to <b>"+
+      sz(TOT)+"</b> — matching the four published file sizes <b>exactly, to the byte</b>.");
+  }
+
+  /* ---- K3-only explainer visuals ---- */
+  if(d.anatomy){
+    var L1=d.layers[1], one=L1.b, per=d.anatomy;
+    var zp=clear("zoomPanel");
+    function zrow(lab,right,total,parts,cap){
+      var w=el("div","zoomrow");
+      w.appendChild(el("div","zoomtop",'<span class="zl">'+lab+'</span><span class="zr">'+right+'</span>'));
+      var bar=el("div","zoombar");
+      parts.forEach(function(p){
+        var i=el("i"); i.style.width=(p[0]/total*100)+"%"; i.style.background=p[1];
+        if(p[2])i.style.opacity=p[2];
+        bar.appendChild(i);
+      });
+      w.appendChild(bar);
+      w.appendChild(el("div","zoomcap",cap));
+      zp.appendChild(w);
+    }
+    zrow("the whole file", sz(d.tensorBytes), d.tensorBytes,
+      [[one,"var(--brass)"],[d.tensorBytes-one,"var(--signal)",.25]],
+      'one layer is <b>'+sz(one)+'</b> — about 1% of the file. There are <b>93</b> of them, and they are all one of two sizes.');
+    zp.appendChild(el("div","vdown","↓"));
+    zrow("one layer", sz(one), one,
+      [[per.expB,"var(--brass)"],[per.restB,"var(--signal)",.25]],
+      'of that, <b>'+sz(per.expB)+'</b> is experts — <b>'+(per.expB/one*100).toFixed(1)+'%</b>. The other 26 tensors share what is left.');
+    zp.appendChild(el("div","vdown","↓"));
+    zrow("the expert block", "3 tensors", per.expB,
+      [[per.expB/3,"var(--brass)"],[per.expB/3,"var(--brass)",.7],[per.expB/3,"var(--brass)",.45]],
+      'three tensors of <b>'+sz(per.expB/3)+'</b> each. Every one holds all <b>896</b> experts stacked together.');
+
+    /* anatomy */
+    var PAL=["var(--brass)","var(--signal)","var(--brass)","var(--signal)","var(--brass)","var(--signal)","var(--f32)"];
+    var OP=[1,1,.55,.55,.3,.3,1];
+    var at=clear("anatTop");
+    [[per.expB,"var(--brass)",1,"896 experts · 92.5%"],[per.restB,"var(--signal)",.3,"7.5%"]].forEach(function(x){
+      var i=el("i","",x[3]); i.style.width=(x[0]/per.total*100)+"%"; i.style.background=x[1]; i.style.opacity=x[2];
+      at.appendChild(i);
+    });
+    var ab=clear("anatBot");
+    var rest=per.rows.filter(function(r){return r.l.indexOf("896 experts")<0;});
+    rest.forEach(function(r,i){
+      var w=r.b/per.restB*100, e=el("i","",w>11?r.l.split(" ·")[0]:"");
+      e.style.width=w+"%"; e.style.background=PAL[i+1]; e.style.opacity=OP[i+1]; e.title=r.l+" — "+sz(r.b);
+      ab.appendChild(e);
+    });
+    var ar=clear("anatRows");
+    per.rows.forEach(function(r,i){
+      var row=el("div","row");
+      row.appendChild(el("span","rl",r.l));
+      var b=el("span","bar"); b.style.width=Math.max(.4,r.b/per.expB*100)+"%";
+      b.style.background=PAL[i]; b.style.opacity=OP[i];
+      var h=el("span"); h.appendChild(b); row.appendChild(h);
+      row.appendChild(el("span","rv",sz(r.b)));
+      ar.appendChild(row);
+    });
+    put("anatNote","Read the bottom bar as a magnified view of the thin slice on the right of the top bar. "+
+      "The <b>router</b> — the part that decides which experts run — is <b>25.7 MB</b>, about 0.15% of the layer it steers.");
+
+    /* experts */
+    var dg=clear("dotGrid"), E=d.expert;
+    var lit={}; for(var i=0;i<E.used;i++) lit[(i*53+17)%E.total]=1;
+    for(var j=0;j<E.total;j++){ var dd=el("i"); if(lit[j])dd.className="on"; dg.appendChild(dd); }
+    var er=clear("expRows");
+    [["stored on disk",E.stored,"var(--signal)",.35],["read for one word",E.read,"var(--brass)",1]].forEach(function(x){
+      var row=el("div","row");
+      row.appendChild(el("span","rl",x[0]));
+      var b=el("span","bar"); b.style.width=(x[1]/E.stored*100)+"%"; b.style.background=x[2]; b.style.opacity=x[3];
+      var h=el("span"); h.appendChild(b); row.appendChild(h);
+      row.appendChild(el("span","rv",sz(x[1])));
+      er.appendChild(row);
+    });
+    put("expNote","So a <b>"+sz(E.stored)+"</b> file behaves like a <b>"+sz(E.read)+"</b> one — "+
+      (E.stored/E.read).toFixed(1)+"× less to move per word. In parameters: <b>"+
+      Math.round(E.activeParams/1e9)+" billion</b> of "+(E.params/1e12).toFixed(2)+
+      " trillion actually take part. The whole file still has to be <b>present</b>, because the router may pick any 16 next time.");
+
+    /* attention compare */
+    var ct=clear("cmpTbl");
+    ct.appendChild(el("thead","","<tr><th></th><th class='a'>linear · KDA</th><th class='b'>full · MLA</th></tr>"));
+    var tb=el("tbody");
+    d.attncmp.forEach(function(r){
+      var tr=el("tr");
+      r.forEach(function(c){ tr.appendChild(el("td","",c)); });
+      tb.appendChild(tr);
+    });
+    ct.appendChild(tb);
+
+    /* layer strip */
+    var ks=clear("kstrip");
+    d.strip.forEach(function(k,i){
+      var e=el("i","k-"+k); e.title="blk."+i+" — "+k; ks.appendChild(e);
+    });
+  }
+
+  /* ---- section order + numbering ---- */
+  var host=document.getElementById("sec-pick").parentNode;
+  var order=d.sections, num=0;
+  /* sections are moved one at a time, so the anchor has to advance with them —
+     inserting each at a fixed point would reverse the order */
+  var anchor=document.getElementById("sec-pick");
+  document.querySelectorAll("section[id^=sec-]").forEach(function(x){
+    if(x.id!=="sec-words"&&x.id!=="sec-pick") x.hidden=true;
+  });
+  order.forEach(function(key){
+    var node=document.getElementById("sec-"+key);
+    if(!node) return;
+    node.hidden=false;
+    host.insertBefore(node, anchor.nextSibling);
+    anchor=node;
+    var h=node.querySelector("h2");
+    if(h){
+      var base=h.textContent.replace(/^\s*\d+\s*·\s*/,"");
+      if(key==="RAW"){ h.textContent=base; }
+      else { num++; h.textContent=num+" · "+base; }
+    }
+  });
+
+  put("foot","Parsed from <b>"+d.name+"</b> · GGUF v"+d.ver+" · "+n(d.nt)+" tensors · "+d.nkv+" keys"+
+    (d.shards>1?" · "+d.shards+" shards":"")+" · headers fetched by HTTP range request, no weight data downloaded.");
+}
+
+(function(){
+  var NS="http://www.w3.org/2000/svg";
+  function cell(x,y,w,h,op){
+    var r=document.createElementNS(NS,"rect");
+    r.setAttribute("x",x);r.setAttribute("y",y);r.setAttribute("width",w);r.setAttribute("height",h);
+    r.setAttribute("rx",2);r.setAttribute("fill","var(--signal-dim)");
+    r.setAttribute("stroke","var(--signal)");
+    if(op)r.setAttribute("opacity",op);
+    return r;
+  }
+  var g2=document.getElementById("grid2");
+  for(var r=0;r<4;r++)for(var c=0;c<8;c++) g2.appendChild(cell(1+c*24,1+r*11.5,22,10,null));
+  var g3=document.getElementById("grid3");
+  [[16,0,.35],[8,5,.6],[0,10,1]].forEach(function(o){
+    var grp=document.createElementNS(NS,"g");
+    for(var r=0;r<3;r++)for(var c=0;c<7;c++) grp.appendChild(cell(o[0]+1+c*24,o[1]+1+r*10,22,9,o[2]));
+    g3.appendChild(grp);
+  });
+})();
+window.__renderFile = render;
+window.__files = F;
+})();
+
+  (function () {
+    /* ---- Gemma 4 configs: layer shapes from each model's config.json,
+            parameter totals and GGUF file sizes as published. ---- */
+    var MODELS = {
+      "12b": {
+        label: "Gemma 4 12B", L: 48, H: 3840, nh: 16, nkv: 8, hd: 256, ffn: 15360,
+        vocab: 262144, ctx: 262144, win: 1024, fullEvery: 6,
+        total: 11.95e9, active: 11.95e9, meta: 15.78e6,
+        q: [["Q2_K_XL", 4.66], ["Q3_K_M", 5.69], ["Q4_K_M", 7.12], ["Q5_K_M", 8.41],
+            ["Q6_K", 9.79], ["Q8_0", 12.7], ["BF16", 23.8]]
+      },
+      "e4b": {
+        label: "Gemma 4 E4B", L: 42, H: 2560, nh: 8, nkv: 2, hd: 256, ffn: 10240,
+        vocab: 262144, ctx: 131072, win: 512, fullEvery: 6, ple: 256,
+        total: 8.0e9, active: 4.5e9, meta: 15.78e6,
+        q: [["Q2_K_XL", 3.76], ["Q3_K_M", 4.06], ["Q4_K_M", 4.98], ["Q5_K_M", 5.48],
+            ["Q6_K", 7.07], ["Q8_0", 8.19], ["BF16", 15.1]]
+      },
+      "31b": {
+        label: "Gemma 4 31B", L: 60, H: 5376, nh: 32, nkv: 16, hd: 256, ffn: 21504,
+        vocab: 262144, ctx: 262144, win: 1024, fullEvery: 6,
+        total: 30.7e9, active: 30.7e9, meta: 15.78e6,
+        q: [["Q2_K_XL", 11.8], ["Q3_K_M", 14.7], ["Q4_K_M", 18.3], ["Q5_K_M", 21.7],
+            ["Q6_K", 25.2], ["Q8_0", 32.6], ["BF16", 61.4]]
+      },
+      "a4b": {
+        label: "Gemma 4 26B A4B", L: 30, H: 2816, nh: 16, nkv: 8, hd: 256, ffn: 2112,
+        vocab: 262144, ctx: 262144, win: 1024, fullEvery: 6,
+        moeFfn: 704, experts: 128, topk: 8,
+        total: 25.2e9, active: 3.8e9, meta: 15.78e6,
+        q: [["Q2_K_XL", 10.5], ["Q3_K_M", 12.7], ["Q4_K_M", 16.9], ["Q5_K_M", 21.2],
+            ["Q6_K", 23.2], ["Q8_0", 26.9], ["BF16", 50.5]]
+      }
+    };
+
+    /* Kimi K3 cannot be derived from the dense-transformer formulas below —
+       MLA attention, linear-attention layers and latent experts all break them.
+       Its numbers come straight from the parsed file instead. */
+    (function () {
+      var F = window.__files; if (!F || !F.k3) return;
+      var k = F.k3, layer = k.layers[1], anat = {};
+      k.anatomy.rows.forEach(function (r) { anat[r.l] = r.b; });
+      var embed = 0;
+      k.extra.forEach(function (t) { if (t.n.indexOf("token_embd") === 0) embed = t.b; });
+      MODELS.k3 = {
+        label: "Kimi K3", L: 93, H: 7168, vocab: 163840, ctx: 1048576,
+        total: k.expert.params, active: k.expert.activeParams, meta: k.metaBytes,
+        q: k.ladder,
+        reference: "mxfp4 (original)",
+        noFullPrecision: true,
+        measured: {
+          rows: [["attention", anat["Attention"] + anat["Linear-attention machinery"]],
+                 ["896 experts, stacked", anat["The 896 experts"]],
+                 ["shared expert", anat["Shared expert · always runs"]],
+                 ["router + projections", anat["Expert in / out projection"] + anat["Router · picks the 16"]]],
+          layer: layer.b, embed: embed,
+          segs: k.roles.slice(0, 5).map(function (r) { return { n: r.r, v: r.b }; }),
+          index: k.indexBytes, entries: k.nt,
+          stored: k.expert.stored, read: k.expert.read,
+          kv: 217e6 + 24 * 576 * 2 * 1048576,
+          kvNaive: 93 * 96 * 128 * 2 * 2 * 1048576
+        }
+      };
+    })();
+
+    var BANDWIDTH = 400; /* GB/s — a fast consumer GPU, order of magnitude */
+
+    function group(n) { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
+    function P(n) {
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + " <span class='u'>B</span>";
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + " <span class='u'>M</span>";
+      return group(n) + "";
+    }
+    function Pshort(n) {
+      return n >= 1e9 ? (n / 1e9).toFixed(2) + " billion" : (n / 1e6).toFixed(0) + " million";
+    }
+    function GB(bytes) { return (bytes / 1e9).toFixed(2) + " <span class='u'>GB</span>"; }
+    function MB(bytes) { return (bytes / 1e6).toFixed(1) + " <span class='u'>MB</span>"; }
+    function KB(bytes) { return (bytes / 1e3).toFixed(0) + " <span class='u'>KB</span>"; }
+
+    function derive(m) {
+      if (m.measured) {
+        var mm = m.measured, ref = 0;
+        m.q.forEach(function (r) { if (r[0] === m.reference) ref = r[1] * 1e9; });
+        return {
+          rows: mm.rows, layer: mm.layer, embed: mm.embed,
+          entries: mm.entries, index: mm.index,
+          q4: ref, blob: ref - m.meta - mm.index - 24,
+          segs: mm.segs, bpw: ref * 8 / m.total, ratio: m.active / m.total,
+          kv: mm.kv, kvNaive: mm.kvNaive, fullLayers: 24, slideLayers: 69,
+          stored: mm.stored, read: mm.read
+        };
+      }
+      var qd = m.H * (m.nh * m.hd),
+          kd = m.H * (m.nkv * m.hd),
+          od = (m.nh * m.hd) * m.H,
+          attn = qd + kd + kd + od,
+          dense = 3 * m.H * m.ffn,
+          experts = m.experts ? m.experts * 3 * m.H * m.moeFfn : 0,
+          ffnTotal = dense + experts,
+          embed = m.vocab * m.H,
+          ple = m.ple ? m.vocab * m.ple * m.L : 0,
+          entries = m.L * 11 + 6,
+          index = entries * 72,
+          q4 = 0;
+
+      m.q.forEach(function (r) { if (r[0] === "Q4_K_M") q4 = r[1] * 1e9; });
+
+      var segs = [{ n: "vocabulary lookup", v: embed }];
+      if (ple) segs.push({ n: "per-layer embeddings", v: ple });
+      segs.push({ n: "attention", v: attn * m.L });
+      if (experts) {
+        segs.push({ n: m.experts + " experts", v: experts * m.L });
+        segs.push({ n: "shared expert", v: dense * m.L });
+      } else {
+        segs.push({ n: "feed-forward", v: dense * m.L });
+      }
+
+      var bptl = m.nkv * m.hd * 2 * 2,
+          full = Math.round(m.L / m.fullEvery),
+          slide = m.L - full;
+
+      return {
+        qd: qd, kd: kd, od: od, attn: attn, dense: dense, experts: experts,
+        ffnTotal: ffnTotal, embed: embed, ple: ple,
+        layer: attn + ffnTotal, entries: entries, index: index, q4: q4,
+        blob: q4 - m.meta - index - 24,
+        segs: segs,
+        bpw: q4 * 8 / m.total,
+        ratio: m.active / m.total,
+        kv: full * bptl * m.ctx + slide * bptl * m.win,
+        kvNaive: m.L * bptl * m.ctx,
+        fullLayers: full, slideLayers: slide
+      };
+    }
+
+    var TINT = ["var(--signal)", "var(--brass)", "var(--signal)", "var(--brass)", "var(--signal)"];
+    var FADE = [1, 1, 0.5, 0.55, 0.3];
+
+    function set(key, html) {
+      document.querySelectorAll('[data-f="' + key + '"]').forEach(function (el) { el.innerHTML = html; });
+    }
+
+    function render(id) {
+      var m = MODELS[id], d = derive(m);
+
+      set("layers", m.L);
+      set("hidden", group(m.H));
+      set("vocab", (m.vocab / 1024) + " <small>K</small>");
+      set("ctx", (m.ctx / 1024) + " <small>K words</small>");
+      set("total", (m.total / 1e9).toFixed(1) + " <small>B</small>");
+      set("active", (m.active / 1e9).toFixed(1) + " <small>B</small>");
+
+      set("meta", MB(m.meta));
+      set("index", KB(d.index) + " <span class='u'>≈</span>");
+      set("blob", GB(d.blob));
+      set("q4size", GB(d.q4));
+      set("vocabshort", group(m.vocab));
+
+      if (d.rows) {
+        ["q", "k", "v", "o"].forEach(function (slot, i) {
+          set("lw" + slot, d.rows[i] ? d.rows[i][0] : "");
+          set("w" + slot, d.rows[i] ? P(d.rows[i][1]) : "");
+        });
+        set("ffnlabel", ""); set("wffn", "");
+      } else {
+        set("lwq", "question / Q"); set("lwk", "key / K");
+        set("lwv", "value / V"); set("lwo", "output / O");
+        set("wq", P(d.qd)); set("wk", P(d.kd)); set("wv", P(d.kd)); set("wo", P(d.od));
+        set("ffnlabel", m.experts ? m.experts + " experts + shared" : "feed-forward (3 tables)");
+        set("wffn", P(d.ffnTotal));
+      }
+      set("wlayer", P(d.layer));
+      set("layersshort", m.L);
+      set("embed", Pshort(d.embed));
+
+      var sum = d.segs.reduce(function (a, s) { return a + s.v; }, 0);
+      set("stack", d.segs.map(function (s, i) {
+        return '<span style="width:' + (s.v / sum * 100).toFixed(2) +
+               '%;background:' + TINT[i] + ';opacity:' + FADE[i] + '"></span>';
+      }).join(""));
+      set("legend", d.segs.map(function (s, i) {
+        return '<span><i style="background:' + TINT[i] + ';opacity:' + FADE[i] + '"></i>' +
+               s.n + ' <b>' + (s.v / sum * 100).toFixed(0) + '%</b></span>';
+      }).join(""));
+      set("stacknote", m.experts
+        ? "Nearly all of the file is experts — but only <b>" + m.topk + " of " + m.experts +
+          "</b> run for any given word, which is why a " + (m.total / 1e9).toFixed(0) +
+          "-billion-weight file reads like a " + (m.active / 1e9).toFixed(1) + "-billion one."
+        : (d.ple
+          ? "The per-layer embedding table is <b>" + (d.ple / sum * 100).toFixed(0) +
+            "%</b> of the weights, but only one row of it is read per word — that's the trick that makes an 8&nbsp;B file behave like a 4.5&nbsp;B one."
+          : "Feed-forward dominates every dense model. <b>Attention is the famous part; the plumbing around it is the expensive part.</b>"));
+
+      set("quants", m.q.map(function (r) {
+        var pct = r[1] / m.q[m.q.length - 1][1] * 100;
+        var ref = m.reference || "Q4_K_M";
+        var cls = r[0] === ref ? " hot" : (r[0] === "BF16" ? " big" : "");
+        return '<div class="qrow' + cls + '"><span class="qn">' + r[0] +
+               '</span><span class="qbar" style="width:' + pct.toFixed(1) + '%"></span>' +
+               '<span class="qs">' + r[1].toFixed(2) + ' GB</span></div>';
+      }).join(""));
+      set("bpw", d.bpw.toFixed(2));
+      set("q4label", (m.reference || "Q4_K_M") + " download");
+
+      /* bandwidth figure */
+      var fullB, q4B, cap;
+      if (m.noFullPrecision) {
+        /* nothing bigger exists, so compare "every expert" against "the 16 that run" */
+        fullB = d.stored / 1e9; q4B = d.read / 1e9;
+        set("bwlab1", "every expert"); set("bwlab2", "the 16 that run");
+        set("bwlab3", "every expert"); set("bwlab4", "16 of 896");
+        cap = "There is no full-precision build to compare against — this file <b>is</b> " +
+              "the original. The saving comes from skipping experts, not from packing.";
+      } else {
+        fullB = m.q[m.q.length - 1][1] * d.ratio; q4B = d.q4 / 1e9 * d.ratio;
+        set("bwlab1", "full size"); set("bwlab2", "packed to 4 bits");
+        set("bwlab3", "full size"); set("bwlab4", "packed");
+        cap = null;
+      }
+      var fullS = BANDWIDTH / fullB, q4S = BANDWIDTH / q4B;
+      var g = function (i) { return document.getElementById(i); };
+      g("bwFull").setAttribute("width", 460);
+      g("bwQ4").setAttribute("width", Math.max(6, 460 * q4B / fullB));
+      g("bwFullT").textContent = fullB.toFixed(1) + " GB";
+      g("bwQ4T").setAttribute("x", 150 + Math.max(6, 460 * q4B / fullB) + 12);
+      g("bwQ4T").textContent = q4B.toFixed(1) + " GB";
+      g("spQ4").setAttribute("width", 300);
+      g("spFull").setAttribute("width", Math.max(6, 300 * fullS / q4S));
+      g("spFullT").setAttribute("x", 150 + Math.max(6, 300 * fullS / q4S) + 12);
+      g("spFullT").textContent = "~" + Math.round(fullS) + " words / sec";
+      g("spQ4T").textContent = "~" + Math.round(q4S) + " words / sec";
+      set("bwtitle", "bytes pulled from memory, per word · " + m.label);
+      set("bwcap", cap || ("Same chip, same math, <b>" + (q4S / fullS).toFixed(1) +
+        "× the output</b> — purely from moving fewer bytes. A theoretical ceiling; real numbers land lower."));
+
+      if (m.measured) {
+        set("kvnote", "That scratchpad is sized up front and is not in the file. For " + m.label +
+          " at its full 1M context it needs about <b>" + (d.kv / 1e9).toFixed(1) +
+          " GB</b> — and would need " + (d.kvNaive / 1e12).toFixed(1) +
+          " TB if all 93 layers kept ordinary keys and values instead of a 576-value latent.");
+      } else
+      set("kvnote", "That scratchpad is sized up front and is not in the file. For " + m.label +
+        " at its full " + (m.ctx / 1024) + "K context it needs about <b>" + (d.kv / 1e9).toFixed(1) +
+        " GB</b> — and would need " + (d.kvNaive / 1e9).toFixed(0) +
+        " GB if " + d.slideLayers + " of its " + m.L +
+        " layers didn't deliberately forget everything older than " + m.win + " words.");
+    }
+
+    window.__renderModel = render;
+
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (!reduce && "IntersectionObserver" in window) {
+      var revealer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { e.target.classList.add("in"); revealer.unobserve(e.target); }
+        });
+      }, { rootMargin: "0px 0px -12% 0px", threshold: 0.08 });
+      document.querySelectorAll(".rise").forEach(function (el) { revealer.observe(el); });
+    } else {
+      document.querySelectorAll(".rise").forEach(function (el) { el.classList.add("in"); });
+    }
+
+    var links = {};
+    document.querySelectorAll(".rail-list a").forEach(function (a) {
+      links[a.getAttribute("href").slice(1)] = a;
+    });
+
+    if ("IntersectionObserver" in window) {
+      var tracker = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          var a = links[e.target.id];
+          if (!a) return;
+          if (e.isIntersecting) {
+            Object.keys(links).forEach(function (k) { links[k].classList.remove("on"); });
+            a.classList.add("on");
+          }
+        });
+      }, { rootMargin: "-20% 0px -60% 0px" });
+      document.querySelectorAll("section.step").forEach(function (s) { tracker.observe(s); });
+    }
+  })();
+
+
+/* ---- one selector drives the whole page ---- */
+(function(){
+  /* which parsed teardown, if any, corresponds to each model */
+  var FILE_FOR = { "12b": "gemma", "k3": "k3" };
+  var NAME = { "e4b": "Gemma 4 E4B", "12b": "Gemma 4 12B", "31b": "Gemma 4 31B",
+               "a4b": "Gemma 4 26B A4B", "k3": "Kimi K3" };
+  var btns = Array.prototype.slice.call(document.querySelectorAll(".mbtabs button"));
+  var part2 = ["part2"].concat(
+    Array.prototype.map.call(document.querySelectorAll('section[id^="sec-"]'),
+      function(s){ return s.id; }));
+  var notice = document.getElementById("nofile");
+
+  function select(id){
+    btns.forEach(function(b){ b.setAttribute("aria-selected", String(b.dataset.model === id)); });
+    window.__renderModel(id);
+
+    var file = FILE_FOR[id];
+    if (file) {
+      notice.hidden = true;
+      document.getElementById("part2").hidden = false;
+      window.__renderFile(file);
+    } else {
+      /* No byte-level teardown exists for this variant — say so rather than
+         showing another model's bytes under its name. */
+      part2.forEach(function(sid){
+        var el = document.getElementById(sid);
+        if (el) el.hidden = true;
+      });
+      document.getElementById("part2").hidden = false;
+      notice.hidden = false;
+      document.getElementById("nofileName").textContent = NAME[id];
+    }
+    try { history.replaceState(null, "", "#" + id); } catch (e) {}
+  }
+
+  btns.forEach(function(b){
+    b.addEventListener("click", function(){ select(b.dataset.model); });
+  });
+  document.getElementById("nofileSwitch").addEventListener("click", function(){
+    select("12b");
+    document.getElementById("part2").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  var start = (location.hash || "").replace("#", "");
+  select(NAME[start] ? start : "12b");
+})();
+
+/* ---- glossary panel ---- */
+(function(){
+  var panel=document.getElementById("gpanel"), scrim=document.getElementById("gscrim"),
+      open=document.getElementById("gopen"), close=document.getElementById("gclose");
+  function show(on,termId){
+    panel.classList.toggle("on",on); scrim.classList.toggle("on",on);
+    scrim.hidden=!on;
+    panel.setAttribute("aria-hidden",String(!on));
+    open.setAttribute("aria-expanded",String(on));
+    document.body.classList.toggle("gopen-lock",on);
+    if(on&&termId){
+      var t=document.getElementById(termId);
+      if(t){
+        t.scrollIntoView({block:"center"});
+        t.classList.add("flash");
+        setTimeout(function(){t.classList.remove("flash");},1200);
+      }
+    }
+    if(on) close.focus(); else open.focus();
+  }
+  open.addEventListener("click",function(){show(!panel.classList.contains("on"));});
+  close.addEventListener("click",function(){show(false);});
+  scrim.addEventListener("click",function(){show(false);});
+  document.addEventListener("keydown",function(e){
+    if(e.key==="Escape"&&panel.classList.contains("on")) show(false);
+  });
+
+  /* give every glossary entry an id so terms can link straight to it */
+  var ids={};
+  panel.querySelectorAll(".gterm").forEach(function(el){
+    var name=el.querySelector(".gt");
+    if(!name) return;
+    var key=name.textContent.trim().split(/\s| /)[0].toLowerCase();
+    if(!el.id) el.id="g-"+key;
+    ids[key]=el.id;
+  });
+
+  /* Mark the first mention of each term in the prose. Walks text nodes only,
+     so no HTML is ever re-parsed. */
+  var TERMS=Object.keys(ids).sort(function(a,b){return b.length-a.length;});
+  var seen={};
+  var walker=document.createTreeWalker(
+    document.querySelector("main"), NodeFilter.SHOW_TEXT, {
+      acceptNode:function(n){
+        if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        var p=n.parentElement;
+        while(p&&p!==document.body){
+          if(/^(CODE|PRE|A|BUTTON|SVG|H1|H2|TEXT)$/.test(p.tagName)||p.classList.contains("term"))
+            return NodeFilter.FILTER_REJECT;
+          p=p.parentElement;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }});
+  var nodes=[], n;
+  while((n=walker.nextNode())) nodes.push(n);
+  nodes.forEach(function(node){
+    for(var i=0;i<TERMS.length;i++){
+      var t=TERMS[i];
+      if(seen[t]) continue;
+      var re=new RegExp("\\b"+t+"\\b","i");
+      var m=re.exec(node.nodeValue);
+      if(!m) continue;
+      seen[t]=1;
+      var after=node.splitText(m.index);
+      after.nodeValue=after.nodeValue.slice(m[0].length);
+      var btn=document.createElement("button");
+      btn.type="button"; btn.className="term"; btn.textContent=m[0];
+      btn.title="What is a "+t+"?";
+      btn.addEventListener("click",function(){show(true,ids[t]);});
+      after.parentNode.insertBefore(btn,after);
+      return;
+    }
+  });
+})();
+</script>
+<script>(function(){
+  var KEY="gguf-breakdown-theme", root=document.documentElement;
+  var btn=document.createElement("button");
+  btn.className="themetoggle"; btn.type="button";
+  function label(m){ return m==="auto" ? "auto" : m; }
+  function apply(m){
+    if(m==="auto") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme",m);
+    btn.textContent=label(m);
+    btn.setAttribute("aria-label","Colour theme: "+m+". Click to change.");
+  }
+  var mode=localStorage.getItem(KEY)||"auto";
+  apply(mode);
+  btn.addEventListener("click",function(){
+    mode = mode==="auto" ? "light" : mode==="light" ? "dark" : "auto";
+    localStorage.setItem(KEY,mode); apply(mode);
+  });
+  document.body.appendChild(btn);
+})();</script>
+</body>
+</html>
