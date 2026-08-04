@@ -841,7 +841,7 @@ table{border-collapse:collapse}
             <line x1="719" y1="40" x2="719" y2="46"/>
           </g>
           <text class="t-sm" x="0" y="32">byte 0</text>
-          <text class="t-sm" x="719" y="32" text-anchor="end">end of file</text>
+          <text class="t-sm" x="719" y="32" text-anchor="end" data-f="xsEnd"></text>
 
           <!-- segments -->
           <rect class="bx-sig" x="0"   y="60" width="44"  height="62" rx="2"/>
@@ -851,7 +851,7 @@ table{border-collapse:collapse}
 
           <text class="t-lbl t-ink" x="22"  y="96" text-anchor="middle">·</text>
           <text class="t-lbl t-ink" x="128" y="90" text-anchor="middle">settings</text>
-          <text class="t-lbl"       x="128" y="106" text-anchor="middle">+ vocabulary</text>
+          <text class="t-lbl"       x="128" y="106" text-anchor="middle" data-f="xsVocab"></text>
           <text class="t-lbl t-ink" x="263" y="96" text-anchor="middle">index</text>
           <text class="t-lbl t-ink" x="517" y="90" text-anchor="middle">the numbers</text>
           <text class="t-lbl"       x="517" y="106" text-anchor="middle">every table, back to back</text>
@@ -868,15 +868,15 @@ table{border-collapse:collapse}
           <text class="t-sm t-sig" x="263" y="158" text-anchor="middle">index</text>
           <text class="t-sm t-brs" x="517" y="158" text-anchor="middle">weights</text>
 
-          <text class="t-lbl" x="22"  y="176" text-anchor="middle">24 B</text>
-          <text class="t-lbl" x="128" y="176" text-anchor="middle">~2 MB</text>
-          <text class="t-lbl" x="263" y="176" text-anchor="middle">~200 KB</text>
-          <text class="t-lbl t-ink" x="517" y="176" text-anchor="middle">4 GB — 400 GB</text>
+          <text class="t-lbl" x="22"  y="176" text-anchor="middle" data-f="xsHdr"></text>
+          <text class="t-lbl" x="128" y="176" text-anchor="middle" data-f="xsMeta"></text>
+          <text class="t-lbl" x="263" y="176" text-anchor="middle" data-f="xsIdx"></text>
+          <text class="t-lbl t-ink" x="517" y="176" text-anchor="middle" data-f="xsData"></text>
 
           <line class="ln-dash" x1="316" y1="188" x2="719" y2="188"/>
-          <text class="t-sm" x="517" y="204" text-anchor="middle">99.9% of the file</text>
+          <text class="t-sm" x="517" y="204" text-anchor="middle" data-f="xsPct"></text>
         </svg>
-        <figcaption>The whole format in one picture. <b>Almost all of it is weights</b> — the rest is a small label on the front telling the program how to read them.</figcaption>
+        <figcaption data-f="xscap"></figcaption>
       </figure>
     </header>
 
@@ -2091,6 +2091,11 @@ window.__files = F;
        Its numbers come straight from the parsed file instead. */
     (function () {
       var F = window.__files; if (!F || !F.k3) return;
+      if (MODELS["12b"]) {
+        MODELS["12b"].meta = F.gemma.metaBytes;
+        MODELS["12b"].exact = { index: F.gemma.indexBytes, blob: F.gemma.tensorBytes,
+                                total: F.gemma.fileBytes };
+      }
       var k = F.k3, layer = k.layers[1], anat = {};
       k.anatomy.rows.forEach(function (r) { anat[r.l] = r.b; });
       var embed = 0;
@@ -2101,6 +2106,9 @@ window.__files = F;
         q: k.ladder,
         reference: "mxfp4 (original)",
         noFullPrecision: true,
+        shardNote: " These are shard 1 of 4 — only the first carries the settings and vocabulary.",
+        exact: { index: k.indexBytes, blob: k.shardTable[0].data,
+                 total: k.shardTable[0].file },
         measured: {
           rows: [["attention", anat["Attention"] + anat["Linear-attention machinery"]],
                  ["896 experts, stacked", anat["The 896 experts"]],
@@ -2137,8 +2145,8 @@ window.__files = F;
         m.q.forEach(function (r) { if (r[0] === m.reference) ref = r[1] * 1e9; });
         return {
           rows: mm.rows, layer: mm.layer, embed: mm.embed,
-          entries: mm.entries, index: mm.index,
-          q4: ref, blob: ref - m.meta - mm.index - 24,
+          entries: mm.entries, index: m.exact ? m.exact.index : mm.index,
+          q4: ref, blob: m.exact ? m.exact.blob : ref - m.meta - mm.index - 24,
           segs: mm.segs, bpw: ref * 8 / m.total, ratio: m.active / m.total,
           kv: mm.kv, kvNaive: mm.kvNaive, fullLayers: 24, slideLayers: 69,
           stored: mm.stored, read: mm.read
@@ -2176,8 +2184,9 @@ window.__files = F;
       return {
         qd: qd, kd: kd, od: od, attn: attn, dense: dense, experts: experts,
         ffnTotal: ffnTotal, embed: embed, ple: ple,
-        layer: attn + ffnTotal, entries: entries, index: index, q4: q4,
-        blob: q4 - m.meta - index - 24,
+        layer: attn + ffnTotal, entries: entries,
+        index: m.exact ? m.exact.index : index, q4: q4,
+        blob: m.exact ? m.exact.blob : q4 - m.meta - index - 24,
         segs: segs,
         bpw: q4 * 8 / m.total,
         ratio: m.active / m.total,
@@ -2205,6 +2214,25 @@ window.__files = F;
       set("active", (m.active / 1e9).toFixed(1) + " <small>B</small>");
 
       set("meta", MB(m.meta));
+
+      /* hero cross-section — real sizes for whichever model is selected */
+      var fileTotal = m.exact ? m.exact.total : 24 + m.meta + d.index + d.blob;
+      var share = d.blob / fileTotal * 100;
+      var shareTxt = share > 99.99 ? "over 99.99%" : share.toFixed(2) + "%";
+      set("xsHdr", "24 B");
+      set("xsMeta", (m.meta / 1e6).toFixed(2) + " MB");
+      set("xsIdx", (d.index >= 1e6 ? (d.index / 1e6).toFixed(1) + " MB"
+                                   : (d.index / 1e3).toFixed(0) + " KB"));
+      set("xsData", d.blob >= 1e12 ? (d.blob / 1e12).toFixed(2) + " TB"
+                                   : (d.blob / 1e9).toFixed(2) + " GB");
+      set("xsPct", shareTxt + " of the file");
+      set("xsEnd", fileTotal >= 1e12 ? (fileTotal / 1e12).toFixed(2) + " TB"
+                                     : (fileTotal / 1e9).toFixed(2) + " GB");
+      set("xsVocab", "+ " + (m.vocab / 1024) + "K words");
+      set("xscap", m.label + " in one picture. <b>" +
+        (share > 99.99 ? "Over 99.99%" : share.toFixed(1) + "%") + " of it is weights</b> — the rest is a small " +
+        "label on the front telling the program how to read them." +
+        (m.shardNote || ""));
       set("index", KB(d.index) + " <span class='u'>≈</span>");
       set("blob", GB(d.blob));
       set("q4size", GB(d.q4));
