@@ -544,6 +544,72 @@ table{border-collapse:collapse}
   ul.plain li{position:relative;margin-bottom:7px;text-wrap:pretty}
   ul.plain li::before{content:"—";position:absolute;left:-1.1rem;color:var(--signal)}
 
+
+  /* ---------- file explorer ---------- */
+  .explorer{display:grid;grid-template-columns:1fr;gap:var(--s3);margin:var(--s3) 0 0}
+  @media (min-width:860px){.explorer{grid-template-columns:240px minmax(0,1fr);gap:var(--s4)}}
+
+  .xcol{display:flex;flex-direction:column;gap:8px}
+  @media (min-width:860px){.xcol{position:sticky;top:74px;align-self:start}}
+  .xcrumb{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-family:var(--f-mono);
+    font-size:10.5px;min-height:16px}
+  .xcrumb button{background:none;border:0;padding:0;font:inherit;color:var(--signal);
+    cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+  .xcrumb button:hover{color:var(--ink)}
+  .xcrumb .sep{color:var(--muted);opacity:.55}
+  .xcrumb .here{color:var(--ink)}
+
+  .xstack{display:flex;flex-direction:column;gap:3px;border-left:1px solid var(--rule);
+    padding-left:10px;position:relative}
+  .xstack::before,.xstack::after{content:attr(data-a);position:absolute;left:-2px;
+    font-family:var(--f-mono);font-size:9px;color:var(--muted);background:var(--paper);
+    padding:2px 0}
+  .xstack::before{top:-14px;content:attr(data-top)}
+  .xstack::after{bottom:-14px;content:attr(data-bottom)}
+
+  .xseg{display:flex;flex-direction:column;justify-content:center;gap:2px;
+    border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);
+    padding:7px 10px;text-align:left;font:inherit;color:inherit;cursor:default;
+    transition:background .2s,border-color .2s,flex-grow .35s cubic-bezier(.2,.7,.3,1);
+    overflow:hidden;min-height:34px}
+  .xseg .xn{font-family:var(--f-mono);font-size:11.5px;color:var(--ink);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .xseg .xv{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+  .xseg.can{cursor:pointer}
+  .xseg.can:hover{border-color:var(--signal);background:var(--signal-dim)}
+  .xseg.on{border-color:var(--signal);background:var(--signal-dim)}
+  .xseg.on .xn{color:var(--signal)}
+  .xseg.big{border-color:var(--brass)}
+  .xseg.big.on{background:var(--brass-dim)}
+  .xseg.big.on .xn{color:var(--brass)}
+  .xseg.can::after{content:"›";position:absolute;right:8px;color:var(--signal);opacity:0}
+  .xseg{position:relative}
+  .xseg.can:hover::after{opacity:1}
+  .xseg:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+  .xpane{min-height:260px}
+  .xpane.swap{animation:xin .34s cubic-bezier(.2,.7,.3,1)}
+  @keyframes xin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .xeyebrow{font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;
+    letter-spacing:.16em;color:var(--muted);margin-bottom:6px}
+  .xtitle{font-family:var(--f-mono);font-weight:500;font-size:clamp(1.2rem,3vw,1.7rem);
+    letter-spacing:-.03em;margin:0 0 4px;color:var(--ink)}
+  .xsize{font-family:var(--f-mono);font-size:12px;color:var(--signal);margin-bottom:var(--s2)}
+  .xbody p{max-width:58ch;margin:0 0 var(--s2)}
+  .xbody p:last-child{margin-bottom:0}
+  .xbody b{font-weight:600}
+  .xkids{margin-top:var(--s3);border-top:1px solid var(--rule);padding-top:var(--s2)}
+  .xkids .k{font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;
+    letter-spacing:.14em;color:var(--muted);margin-bottom:10px}
+  .xrow{display:grid;grid-template-columns:minmax(96px,150px) 1fr 72px;gap:var(--s2);
+    align-items:center;font-family:var(--f-mono);font-size:11.5px;margin-bottom:5px}
+  .xrow .rn{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .xrow .rb{height:12px;border-radius:2px;background:var(--signal-dim);
+    border:1px solid var(--signal);min-width:2px}
+  .xrow.big .rb{background:var(--brass-dim);border-color:var(--brass)}
+  .xrow .rv{text-align:right;color:var(--muted);white-space:nowrap}
+  .xhint{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);margin-top:var(--s2)}
+
   /* ---------- optional deep dive ---------- */
   .deep{margin-top:var(--s5);border-top:2px solid var(--rule);padding-top:var(--s4)}
   .deep>summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:5px;
@@ -864,11 +930,10 @@ table{border-collapse:collapse}
   <nav class="rail" aria-label="Load sequence">
     <div class="rail-title">Load sequence</div>
     <ul class="rail-list">
-      <li><a href="#s1"><span class="n">01</span><span>One file</span></a></li>
-      <li><a href="#s2"><span class="n">02</span><span>The label at the front</span></a></li>
-      <li><a href="#s4"><span class="n">03</span><span>Mapped, not loaded</span></a></li>
-      <li><a href="#s5"><span class="n">04</span><span>Packed small</span></a></li>
-      <li><a href="#s8"><span class="n">05</span><span>Running it</span></a></li>
+      <li><a href="#s1"><span class="n">01</span><span>Open the file</span></a></li>
+      <li><a href="#s4"><span class="n">02</span><span>Mapped, not loaded</span></a></li>
+      <li><a href="#s5"><span class="n">03</span><span>Packed small</span></a></li>
+      <li><a href="#s8"><span class="n">04</span><span>Running it</span></a></li>
       <li class="railgap"><a href="#deep"><span class="n">▾</span><span>A real file</span></a></li>
     </ul>
   </nav>
@@ -909,130 +974,29 @@ table{border-collapse:collapse}
 
     <!-- ================= 01 ================= -->
     <section class="step" id="s1">
-      <div class="eyebrow"><span class="n">01</span><span>What it is</span></div>
-      <h2>A file in two parts</h2>
-      <p>Open a GGUF file and there are only two things inside. At the front, a small
-      <b>label</b> — a few megabytes saying what the model is and where everything sits. After
-      that, the <b>numbers</b>: every table of weights, back to back, and nothing else.</p>
-      <p>The label is under a thousandth of the file. All the rest is the model itself.</p>
-      <figure class="rise fig-lead">
-        <div class="drill" data-drill="overview">
-          <div class="druler"><span>byte 0</span><span class="dend"></span></div>
-          <div class="dbar"></div>
-          <p class="dnote"></p>
+      <div class="eyebrow"><span class="n">01</span><span>Open the file</span></div>
+      <h2>What is in there</h2>
+      <p>The file runs top to bottom: a small label first, then the model's numbers. Click any
+      part to open it — the panel on the right follows you down.</p>
+
+      <div class="explorer">
+        <div class="xcol">
+          <nav class="xcrumb" id="xcrumb" aria-label="Breadcrumb"></nav>
+          <div class="xstack" id="xstack" data-top="byte 0" data-bottom=""></div>
         </div>
-        <figcaption data-f="xscap"></figcaption>
-      </figure>
-      <h3 class="dhead" id="d-header">Inside the header</h3>
-      <div class="drill" data-drill="header">
-        <div class="druler"><span>byte 0</span><span class="dend"></span></div>
-        <div class="dbar"></div>
-        <p class="dnote"></p>
+        <div class="xpane" id="xpane" aria-live="polite"></div>
       </div>
-
-      <p>That label is also all a program needs. Models used to ship as a folder — settings here,
-      vocabulary there, weights split across numbered files, plus a script to glue them together.
-      A GGUF carries its own instructions, so one program can run a model it has never seen.</p>
-      <figure class="rise">
-        <svg viewBox="0 0 720 200" role="img" aria-label="Before: six separate files plus a script. After: one GGUF file.">
-          <text class="t-sm" x="0" y="14">before</text>
-          <rect class="bx" x="0"  y="26" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="42">config.json</text>
-          <rect class="bx" x="0"  y="56" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="72">tokenizer.json</text>
-          <rect class="bx" x="0"  y="86" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="102">vocab.txt</text>
-          <rect class="bx" x="0"  y="116" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="132">weights-1-of-3</text>
-          <rect class="bx" x="0"  y="146" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="162">weights-2-of-3</text>
-          <rect class="bx" x="0"  y="176" width="126" height="24" rx="2"/><text class="t-lbl" x="10" y="192">weights-3-of-3</text>
-
-          <rect class="bx" x="146" y="86" width="118" height="54" rx="2" stroke-dasharray="4 3"/>
-          <text class="t-lbl" x="205" y="108" text-anchor="middle">+ a script</text>
-          <text class="t-lbl" x="205" y="124" text-anchor="middle">to assemble it</text>
-
-          <path class="ln-sig" d="M 288 113 L 356 113"/>
-          <path class="ln-sig" d="M 348 108 L 356 113 L 348 118"/>
-
-          <text class="t-sm" x="386" y="14">after</text>
-          <rect class="bx-sig" x="386" y="26" width="334" height="174" rx="3"/>
-          <text class="t-big t-ink" x="553" y="100" text-anchor="middle">model.gguf</text>
-          <text class="t-lbl" x="553" y="124" text-anchor="middle">settings · vocabulary · every weight</text>
-          <text class="t-sm t-sig" x="553" y="150" text-anchor="middle">no script required</text>
-        </svg>
-        <figcaption>One file to download, one file to open, and <b>nothing to keep in sync</b>.</figcaption>
-      </figure>    </section>
+    </section>
 
 
     <!-- ================= 02 ================= -->
-    <section class="step" id="s2">
-      <div class="eyebrow"><span class="n">02</span><span>The label</span></div>
-      <h2>What the label says</h2>
-      <p>It is a plain list of keys and values. Three kinds of thing live in it:</p>
-      <ul class="plain">
-        <li><b>the shape</b> — how many layers, how wide, how the pieces connect</li>
-        <li><b>the vocabulary</b> — every token the model knows, written out as text</li>
-        <li><b>the index</b> — every table of numbers by name, and the exact byte it starts at</li>
-      </ul>
-      <p>Nothing about the model is built into the program. Change the file, change the model.</p>
-      <figure class="rise">
-        <svg viewBox="0 0 720 232" role="img" aria-label="Metadata key-value pairs on the left feeding three conclusions on the right.">
-          <rect class="bx" x="0" y="10" width="300" height="212" rx="3"/>
-          <text class="t-sm t-sig" x="16" y="34">key → value</text>
-          <line class="ln" x1="16" y1="44" x2="284" y2="44"/>
-
-          <text class="t-lbl t-ink" x="16" y="70">family</text>       <text class="t-lbl" x="284" y="70" text-anchor="end" data-f="msArch"></text>
-          <text class="t-lbl t-ink" x="16" y="96">layers</text>       <text class="t-lbl" x="284" y="96" text-anchor="end" data-f="msLayers"></text>
-          <text class="t-lbl t-ink" x="16" y="122">width</text>       <text class="t-lbl" x="284" y="122" text-anchor="end" data-f="msWidth"></text>
-          <text class="t-lbl t-ink" x="16" y="148">context</text> <text class="t-lbl" x="284" y="148" text-anchor="end" data-f="msCtx"></text>
-          <text class="t-lbl t-ink" x="16" y="174">vocabulary</text>  <text class="t-lbl" x="284" y="174" text-anchor="end" data-f="msVocab"></text>
-          <text class="t-lbl t-ink" x="16" y="200">chat format</text> <text class="t-lbl" x="284" y="200" text-anchor="end">template string</text>
-
-          <path class="ln-sig" d="M 300 116 L 330 116 M 330 60 L 330 172 M 330 60 L 386 60 M 330 116 L 386 116 M 330 172 L 386 172"/>
-          <path class="ln-sig" d="M 378 55 L 386 60 L 378 65 M 378 111 L 386 116 L 378 121 M 378 167 L 386 172 L 378 177"/>
-
-          <rect class="bx-sig" x="396" y="40"  width="324" height="40" rx="2"/>
-          <text class="t-lbl t-ink" x="412" y="65">how to wire the model together</text>
-          <rect class="bx-sig" x="396" y="96"  width="324" height="40" rx="2"/>
-          <text class="t-lbl t-ink" x="412" y="121">how much memory to reserve</text>
-          <rect class="bx-sig" x="396" y="152" width="324" height="40" rx="2"/>
-          <text class="t-lbl t-ink" x="412" y="177">how to turn your text into numbers</text>
-        </svg>
-        <figcaption>Read the list on the left and you know <b>how many layers to build, how much memory to reserve, and how to turn text into tokens</b>.</figcaption>
-      </figure>
-      <h3 class="dhead" id="d-metadata">Inside the settings and vocabulary</h3>
-      <div class="drill" data-drill="metadata">
-        <div class="druler"><span>start</span><span class="dend"></span></div>
-        <div class="dbar"></div>
-        <p class="dnote"></p>
-      </div>
-
-      <p>The <b>index</b> is the part the next step depends on. Every table has an exact address,
-      so finding one is arithmetic rather than searching — the same trick a zip file uses.</p>
-
-      <h3 class="dhead" id="d-index">Inside one index entry</h3>
-      <div class="drill" data-drill="index">
-        <div class="druler"><span>start</span><span class="dend"></span></div>
-        <div class="dbar"></div>
-        <p class="dnote"></p>
-      </div>
-      <div class="panel">
-            <h3>Where the file goes</h3>
-            <table class="kv">
-              <tbody>
-                <tr><td data-f="lhdr"></td><td data-f="hdrsize"></td></tr>
-                <tr><td data-f="lmeta"></td><td data-f="meta"></td></tr>
-                <tr><td data-f="lindex"></td><td data-f="index"></td></tr>
-                <tr><td data-f="lblob"></td><td data-f="blob"></td></tr>
-                <tr class="tot"><td data-f="q4label"></td><td data-f="q4size"></td></tr>
-              </tbody>
-            </table>
-            <p class="note" data-f="wherenote"></p>
-          </div>
-    </section>
 
 
     <!-- ================= 03 ================= -->
 
     <!-- ================= 04 ================= -->
     <section class="step" id="s4">
-      <div class="eyebrow"><span class="n">03</span><span>Mapped, not loaded</span></div>
+      <div class="eyebrow"><span class="n">02</span><span>Mapped, not loaded</span></div>
       <h2>The file is never really read</h2>
       <p>Here's the part that surprises people. The program doesn't copy <b data-f="mmSize"></b> into memory. It calls <code>mmap</code> — <b>the file gets an address range, and pages arrive only when touched</b>.</p>
       <p>The bytes on disk are already in the exact layout the math wants, so there's no conversion step. Nothing to parse, nothing to rearrange.</p>
@@ -1080,7 +1044,7 @@ table{border-collapse:collapse}
 
     <!-- ================= 05 ================= -->
     <section class="step" id="s5">
-      <div class="eyebrow"><span class="n">04</span><span>Packed small</span></div>
+      <div class="eyebrow"><span class="n">03</span><span>Packed small</span></div>
       <h2>Why the file fits at all</h2>
       <p>The weights aren't stored as normal floating-point numbers. They're <b>rounded onto a grid of 16 steps and stored as 4 bits</b> — half a byte each.</p>
       <p>Rounding on its own would be too crude. So the numbers are handled in <b>groups of 32</b>, and each group stores its own step size. A group of small numbers gets a fine grid, a group of large ones gets a coarse grid.</p>
@@ -1120,9 +1084,6 @@ table{border-collapse:collapse}
         <figcaption>Quantization is <b>rounding to a grid</b>, with the grid spacing chosen per group so the rounding error stays small.</figcaption>
       </figure>
 
-      <h3 class="dhead" id="d-weights">Inside the weights</h3>
-      <div class="drill" data-drill="weights">
-        <div class="druler"><span>start</span><span class="dend"></span></div>
         <div class="dbar"></div>
         <p class="dnote"></p>
       </div>
@@ -1214,7 +1175,7 @@ table{border-collapse:collapse}
 
     <!-- ================= 08 ================= -->
     <section class="step" id="s8">
-      <div class="eyebrow"><span class="n">05</span><span>Running it</span></div>
+      <div class="eyebrow"><span class="n">04</span><span>Running it</span></div>
       <h2>Your prompt, then one word at a time</h2>
       <p>Two different jobs. Your prompt goes through <b>all at once</b> — that's a big batch of multiplications, and it's quick. Then the model produces output <b>one word per full pass</b>, and each pass has to wait for the one before it.</p>
 
@@ -2039,145 +2000,199 @@ window.__files = F;
     })();
 
 
-    /* ---------------- cross-section, drillable ----------------
-       One overview in step 1; each part's opened-up version lives in the
-       section that explains it. Clicking a part zooms into it and takes you
-       there. ------------------------------------------------------------- */
-    var drill = (function () {
-      var tree = null;
+    /* ---------------- the file explorer ----------------
+       Left: the file top to bottom. Right: what you are looking at.
+       Clicking a part descends into it; the breadcrumb climbs back. ------- */
+    var explorer = (function () {
+      var stack = document.getElementById("xstack"),
+          crumb = document.getElementById("xcrumb"),
+          pane  = document.getElementById("xpane");
+      var root = null, path = [];
 
       function sz(b) {
         if (b >= 1e12) return (b / 1e12).toFixed(2) + " TB";
         if (b >= 1e9)  return (b / 1e9).toFixed(2) + " GB";
         if (b >= 1e6)  return (b / 1e6).toFixed(2) + " MB";
         if (b >= 1e3)  return (b / 1e3).toFixed(1) + " KB";
-        return Math.round(b) + " B";
+        return Math.round(b) + " bytes";
+      }
+      function el(t, c, h) {
+        var e = document.createElement(t);
+        if (c) e.className = c;
+        if (h != null) e.innerHTML = h;
+        return e;
       }
 
       function build(m, d, ex, nsh) {
-        var F = window.__files || {};
-        var file = m.id === "k3" ? F.k3 : F.gemma;
+        var F = window.__files || {}, file = m.id === "k3" ? F.k3 : F.gemma;
         var n = nsh || 1;
-        var hdr = ex ? ex.header : 24,
-            meta = ex ? ex.meta : m.meta,
+        var hdr = ex ? ex.header : 24, meta = ex ? ex.meta : m.meta,
             idx = d.index, blob = d.blob;
+        var many = n > 1;
 
-        var metaParts = null, metaNote = "";
+        /* metadata sub-parts, scaled from the measured key spans */
+        var metaKids = null;
         if (file && file.meta) {
           var raw = file.meta.reduce(function (a, r) { return a + r.b; }, 0) + file.metaRest;
-          var k = meta / raw;                       /* same tokenizer, different file size */
-          metaParts = file.meta.map(function (r) {
-            return { n: r.k.replace("tokenizer.ggml.", "").replace("tokenizer.", ""), v: r.b * k };
-          }).concat([{ n: "the model's own settings", v: file.metaRest * k }]);
-          metaNote = m.exact
-            ? "Measured from the file. Almost all of it is the tokenizer."
-            : "Measured on the 12B file — every Gemma 4 shares one tokenizer.";
+          var k = meta / raw;
+          var WHAT = {
+            "merges": "Rules for gluing token fragments back into whole words.",
+            "tokens": "Every token the model knows, written out as text.",
+            "token_type": "What kind each token is — ordinary, control, unused.",
+            "scores": "How common each token is, used when splitting your text up.",
+            "chat_template": "The pattern for laying out a conversation before it goes in."
+          };
+          metaKids = file.meta.map(function (r) {
+            var name = r.k.replace("tokenizer.ggml.", "").replace("tokenizer.", "");
+            return { n: name, v: r.b * k, why: WHAT[name] ||
+                     "A setting the program reads before building anything." };
+          }).concat([{ n: "the model's own shape", v: file.metaRest * k,
+                       why: "Layer count, width, rope settings — the entire architecture, in a "
+                          + "few hundred bytes. Everything above it is vocabulary." }]);
         }
 
-        var idxParts = null, idxNote = "";
+        var idxKids = null;
         if (file && file.entry) {
-          idxParts = file.entry.g.map(function (g) {
-            return { n: g.l, v: g.b.length, d: String(g.v).slice(0, 28) };
+          idxKids = file.entry.g.map(function (g) {
+            return { n: g.l, v: g.b.length, why: "Reads as: " + String(g.v).slice(0, 44) };
           });
-          idxNote = "One entry, " + file.entry.len + " bytes. There are " +
-                    (d.entries || file.nt) + " of them, back to back.";
         }
 
-        var wParts = (d.segs || []).map(function (x) { return { n: x.n, v: x.v }; });
-        if (wParts.length) {
-          var scale = blob / wParts.reduce(function (a, r) { return a + r.v; }, 0);
-          wParts.forEach(function (r) { r.v *= scale; });
+        var wKids = (d.segs || []).map(function (x) { return { n: x.n, v: x.v }; });
+        if (wKids.length) {
+          var sc = blob / wKids.reduce(function (a, r) { return a + r.v; }, 0);
+          wKids.forEach(function (r) { r.v *= sc; });
         }
 
         return {
-          overview: { v: hdr + meta + idx + blob,
-                      note: "Not to scale — at true proportions the weights leave nothing else visible. Click a part to open it." },
-          header: { n: "header", v: hdr, note: "Fixed by the format: 24 bytes" +
-                      (n > 1 ? ", once in each of the " + n + " shards" : "") + ", and always these four fields.",
-                    kids: [{ n: "magic", v: 4 * n, d: 'the letters GGUF' },
-                           { n: "version", v: 4 * n, d: "3" },
-                           { n: "tensor count", v: 8 * n, d: "how many tables follow" },
-                           { n: "setting count", v: 8 * n, d: "how many key/value pairs" }] },
-          metadata: { n: "metadata", v: meta, note: metaNote, kids: metaParts },
-          index: { n: "index", v: idx, note: idxNote, kids: idxParts },
-          weights: { n: "weights", v: blob, kids: wParts.length ? wParts : null,
-                     note: "Where the numbers go, summed over every layer." }
+          n: "the whole file", v: hdr + meta + idx + blob,
+          why: ["<b>" + m.label + "</b>, saved to disk" + (many ? " across " + n + " files" : "") +
+                ". It reads top to bottom, and there are only two kinds of thing in it: a small " +
+                "<b>label</b> at the front, and the model's <b>numbers</b> after it.",
+                "The label is under a thousandth of the whole. Everything else is the model."],
+          hint: "Pick a part on the left.",
+          kids: [
+            { n: "header", v: hdr, big: false,
+              why: ["The first 24 bytes" + (many ? " of each file" : "") + ", and they never vary. " +
+                    "A program reads them and knows what it is holding before it reads anything else.",
+                    "Four numbers, that is all: what the file is, which version, and how much of " +
+                    "each thing to expect."],
+              kids: [{ n: "magic", v: 4 * n, why: "The letters G, G, U, F. Anything else and this is not a GGUF." },
+                     { n: "version", v: 4 * n, why: "Which revision of the format — 3 today." },
+                     { n: "tensor count", v: 8 * n, why: "How many tables of numbers the file holds." },
+                     { n: "setting count", v: 8 * n, why: "How many key/value pairs come next." }] },
+            { n: "settings + vocabulary", v: meta, big: false, key: "metadata",
+              why: ["Everything about the model that is not a number: how many layers, how wide, " +
+                    "and the whole vocabulary. Plain key-and-value pairs.",
+                    "This is why one program can run a model it has never seen — nothing about the " +
+                    "model is built into the program. Change the file, change the model.",
+                    "Almost all the bulk is the tokenizer. The model's actual shape takes a few " +
+                    "hundred bytes."],
+              kids: metaKids },
+            { n: "index", v: idx, big: false,
+              why: ["A directory of every table in the file: its name, its shape, its storage type, " +
+                    "and the exact byte it starts at.",
+                    "This is the part that makes the file <b>mappable</b>. You never search for a " +
+                    "table — you compute where it is and read from there. It is the same trick a " +
+                    "zip file uses."],
+              kids: idxKids,
+              hint: "One entry, field by field — taken from the real first record." },
+            { n: "the numbers", v: blob, big: true, key: "weights",
+              why: ["The model itself. Every table of weights, back to back, in exactly the order " +
+                    "the index promised.",
+                    "Nothing separates them — no names, no lengths, no gaps beyond alignment. The " +
+                    "index already said where everything is, so none of that is needed."],
+              kids: wKids.length ? wKids : null,
+              hint: "Summed over every layer." }
+          ]
         };
       }
 
-      function paint(host, kids, total, schematic, clickable) {
-        var bar = host.querySelector(".dbar");
-        var raw = kids.map(function (k) { return k.v / total * 100; });
-        var w = schematic ? [6, 22, 14, 58]
-                          : raw.map(function (x) { return Math.max(x, 4); });
-        var sum = w.reduce(function (a, b) { return a + b; }, 0);
-        w = w.map(function (x) { return x / sum * 100; });
+      function at() { var n = root; path.forEach(function (i) { n = n.kids[i]; }); return n; }
 
-        bar.className = "dbar";
-        bar.textContent = "";
+      function draw(animate) {
+        var cur = at(), kids = cur.kids || [];
+        var total = kids.reduce(function (a, k) { return a + k.v; }, 0) || 1;
+        var top = path.length === 0;
+
+        /* heights: true share below the top, floored so nothing disappears */
+        var share = kids.map(function (k) { return k.v / total; });
+        var g = top ? [0.6, 1.6, 1, 5.8] : share.map(function (x) { return Math.max(x, 0.09); });
+
+        stack.textContent = "";
         kids.forEach(function (k, i) {
-          var el = document.createElement(clickable ? "button" : "div");
-          el.className = "dseg" + (k.n === "weights" ? " big" : "") + (clickable ? " can" : "");
-          el.style.width = w[i] + "%";
-          if (clickable) { el.type = "button"; el.title = "Open " + k.n; }
-          el.innerHTML = '<div class="swatch"><span class="sname">' + k.n + "</span></div>" +
-            '<div class="smeta"><span class="ssize">' + sz(k.v) + "</span>" +
-            (k.d ? " · " + k.d : "") + "</div>";
-          if (clickable) el.addEventListener("click", function () { zoom(bar, el, k.n); });
-          bar.appendChild(el);
+          var can = !!(k.kids && k.kids.length);
+          var seg = el(can ? "button" : "div",
+                       "xseg" + (k.big ? " big" : "") + (can ? " can" : ""),
+                       '<span class="xn">' + k.n + '</span><span class="xv">' + sz(k.v) + "</span>");
+          seg.style.flex = g[i] + " 1 0";
+          if (can) { seg.type = "button"; seg.title = "Open " + k.n; }
+          seg.addEventListener("click", function () {
+            if (can) { path.push(i); draw(true); }
+            else { show(k, cur); mark(seg); }
+          });
+          stack.appendChild(seg);
         });
-        host.querySelector(".dend").textContent = sz(total);
-        var note = host.querySelector(".dnote");
-        if (note) note.textContent = "";
-        return bar;
+        stack.dataset.bottom = sz(cur.v);
+        stack.style.minHeight = top ? "320px" : "230px";
+
+        /* breadcrumb */
+        crumb.textContent = "";
+        var trail = [root], n = root;
+        path.forEach(function (i) { n = n.kids[i]; trail.push(n); });
+        trail.forEach(function (t, i) {
+          if (i) crumb.appendChild(el("span", "sep", "›"));
+          if (i === trail.length - 1) crumb.appendChild(el("span", "here", t.n));
+          else {
+            var b = el("button", null, t.n);
+            b.type = "button";
+            b.addEventListener("click", function () { path = path.slice(0, i); draw(true); });
+            crumb.appendChild(b);
+          }
+        });
+        show(cur, trail[trail.length - 2], animate);
       }
 
-      /* collapse everything but the chosen part, then hand over to its section */
-      function zoom(bar, chosen, key) {
-        var target = document.querySelector('[data-drill="' + key + '"]');
-        var head = document.getElementById("d-" + key);
-        var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      function mark(seg) {
+        Array.prototype.forEach.call(stack.children, function (c) { c.classList.remove("on"); });
+        seg.classList.add("on");
+      }
 
-        function arrive() {
-          bar.className = "dbar";
-          Array.prototype.forEach.call(bar.children, function (c) { c.style.width = c.dataset.w; });
-          (head || target).scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
-          if (head) { head.classList.add("flash"); setTimeout(function () { head.classList.remove("flash"); }, 1400); }
-          if (target) { target.classList.add("flash"); setTimeout(function () { target.classList.remove("flash"); }, 1400); }
-        }
+      function show(node, parent, animate) {
+        pane.classList.remove("swap");
+        if (animate !== false) { void pane.offsetWidth; pane.classList.add("swap"); }
+        pane.textContent = "";
+        pane.appendChild(el("div", "xeyebrow", parent ? "inside " + parent.n : "you are looking at"));
+        pane.appendChild(el("h3", "xtitle", node.n));
+        pane.appendChild(el("div", "xsize", sz(node.v)));
+        var body = el("div", "xbody");
+        (node.why || []).forEach(function (t) { body.appendChild(el("p", null, t)); });
+        pane.appendChild(body);
 
-        if (!target) return;
-        if (reduce) { arrive(); return; }
-
-        Array.prototype.forEach.call(bar.children, function (c) { c.dataset.w = c.style.width; });
-        bar.classList.add("zooming");
-        chosen.classList.add("chosen");
-        /* let the class land before the widths change, or there is no transition */
-        requestAnimationFrame(function () {
-          Array.prototype.forEach.call(bar.children, function (c) {
-            c.style.width = c === chosen ? "100%" : "0%";
+        if (node.kids && node.kids.length) {
+          var box = el("div", "xkids");
+          box.appendChild(el("div", "k", "what is inside"));
+          var max = Math.max.apply(null, node.kids.map(function (k) { return k.v; }));
+          node.kids.forEach(function (k) {
+            var row = el("div", "xrow" + (k.big ? " big" : ""));
+            row.appendChild(el("span", "rn", k.n));
+            var bar = el("span", "rb");
+            bar.style.width = Math.max(2, k.v / max * 100) + "%";
+            var cell = el("span"); cell.appendChild(bar); row.appendChild(cell);
+            row.appendChild(el("span", "rv", sz(k.v)));
+            box.appendChild(row);
+            if (k.why) box.appendChild(el("p", "xhint", k.why));
           });
-        });
-        setTimeout(function () { chosen.classList.remove("chosen"); arrive(); }, 440);
+          if (node.hint) box.appendChild(el("p", "xhint", node.hint));
+          pane.appendChild(box);
+        } else if (node.why && node.hint) {
+          pane.appendChild(el("p", "xhint", node.hint));
+        }
       }
 
       return {
         load: function (m, d, ex, nsh) {
-          tree = build(m, d, ex, nsh);
-          document.querySelectorAll("[data-drill]").forEach(function (host) {
-            var key = host.dataset.drill;
-            if (key === "overview") {
-              var kids = [tree.header, tree.metadata, tree.index, tree.weights];
-              paint(host, kids, tree.overview.v, true, true);
-              host.querySelector(".dnote").textContent = tree.overview.note;
-            } else {
-              var node = tree[key];
-              if (!node || !node.kids) { host.hidden = true; return; }
-              host.hidden = false;
-              paint(host, node.kids, node.v, false, false);
-              host.querySelector(".dnote").textContent = node.note || "";
-            }
-          });
+          root = build(m, d, ex, nsh); path = []; draw(false);
         }
       };
     })();
@@ -2296,7 +2311,7 @@ window.__files = F;
       set("meta", MB(ex ? ex.meta : m.meta));
 
       /* hero cross-section — a drillable view of the selected file */
-      drill.load(m, d, ex, nsh);
+      explorer.load(m, d, ex, nsh);
 
       var fileTotal = m.exact ? m.exact.total : 24 + m.meta + d.index + d.blob;
       var share = d.blob / fileTotal * 100;
