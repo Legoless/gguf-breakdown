@@ -484,6 +484,38 @@ table{border-collapse:collapse}
     color:var(--paper);border:1px solid var(--signal);border-radius:3px;
     padding:8px 12px;cursor:pointer;line-height:1}
 
+  .drill{display:flex;flex-direction:column;gap:8px}
+  .dcrumb{display:flex;align-items:center;gap:7px;font-family:var(--f-mono);font-size:11px;
+    min-height:18px;flex-wrap:wrap}
+  .dcrumb button{background:none;border:0;padding:0;font:inherit;color:var(--signal);
+    cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+  .dcrumb button:hover{color:var(--ink)}
+  .dcrumb .sep{color:var(--muted);opacity:.6}
+  .dcrumb .here{color:var(--ink)}
+  .druler{display:flex;justify-content:space-between;font-family:var(--f-mono);
+    font-size:10px;color:var(--muted);border-bottom:1px solid var(--rule);padding-bottom:5px}
+
+  .dbar{display:flex;gap:3px;align-items:stretch;min-height:96px}
+  .dseg{flex:none;display:flex;flex-direction:column;gap:0;border:0;padding:0;
+    background:none;font:inherit;text-align:left;color:inherit;min-width:0}
+  .dseg .swatch{height:58px;border-radius:2px;border:1px solid var(--signal);
+    background:var(--signal-dim);display:flex;align-items:center;justify-content:center;
+    padding:0 6px;overflow:hidden;transition:background .16s,border-color .16s}
+  .dseg .sname{font-family:var(--f-mono);font-size:10.5px;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dseg .smeta{padding-top:7px;font-family:var(--f-mono);font-size:10px;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dseg .ssize{color:var(--ink)}
+  .dseg.big .swatch{border-color:var(--brass);background:var(--brass-dim)}
+  .dseg.big .ssize{color:var(--brass)}
+  .dseg.can{cursor:pointer}
+  .dseg.can .swatch::after{content:"▸";margin-left:6px;color:var(--signal);font-size:9px}
+  .dseg.can:hover .swatch{background:var(--signal);border-color:var(--signal)}
+  .dseg.can:hover .sname{color:var(--paper)}
+  .dseg.can.big:hover .swatch{background:var(--brass);border-color:var(--brass)}
+  .dseg:focus-visible{outline:2px solid var(--signal);outline-offset:3px;border-radius:3px}
+  .dnote{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);margin:0}
+
   .xspart{cursor:pointer}
   .xspart .xsbox{transition:fill .16s, stroke .16s}
   .xspart:hover .xsbox{fill:var(--signal);stroke:var(--signal)}
@@ -872,57 +904,12 @@ table{border-collapse:collapse}
       that, the <b>numbers</b>: every table of weights, back to back, and nothing else.</p>
       <p>The label is under a thousandth of the file. All the rest is the model itself.</p>
       <figure class="rise fig-lead">
-        <svg viewBox="0 0 720 216" role="img" aria-label="Cross-section of a GGUF file, in file order: header, metadata, tensor index, then the weights. Each part links to the step that explains it.">
-          <g class="ln">
-            <line x1="0" y1="46" x2="720" y2="46"/>
-            <line x1="0" y1="40" x2="0" y2="46"/>
-            <line x1="44" y1="40" x2="44" y2="46"/>
-            <line x1="212" y1="40" x2="212" y2="46"/>
-            <line x1="316" y1="40" x2="316" y2="46"/>
-            <line x1="719" y1="40" x2="719" y2="46"/>
-          </g>
-          <text class="t-sm" x="0" y="32">byte 0</text>
-          <text class="t-sm" x="719" y="32" text-anchor="end" data-f="xsEnd"></text>
-
-          <a href="#s1" class="xspart" aria-label="header — jump to the step that explains it">
-            <rect class="bx-sig xsbox" x="0" y="60" width="44" height="62" rx="2"/>
-            <text class="t-lbl t-ink" x="22" y="96" text-anchor="middle">·</text>
-            <text class="xsnum" x="7" y="74">1</text>
-            <line class="ln xstick" x1="22" y1="126" x2="22" y2="142"/>
-            <text class="t-sm t-sig" x="22" y="158" text-anchor="middle">header</text>
-            <text class="t-lbl" x="22" y="176" text-anchor="middle" data-f="xsHdr"></text>
-          </a>
-          <a href="#s2" class="xspart" aria-label="metadata — jump to the step that explains it">
-            <rect class="bx-sig xsbox" x="46" y="60" width="164" height="62" rx="2"/>
-            <text class="t-lbl t-ink" x="128" y="90" text-anchor="middle">settings</text>
-            <text class="t-lbl" x="128" y="106" text-anchor="middle" data-f="xsVocab"></text>
-            <text class="xsnum" x="53" y="74">2</text>
-            <line class="ln xstick" x1="128" y1="126" x2="128" y2="142"/>
-            <text class="t-sm t-sig" x="128" y="158" text-anchor="middle">metadata</text>
-            <text class="t-lbl" x="128" y="176" text-anchor="middle" data-f="xsMeta"></text>
-          </a>
-          <a href="#s2" class="xspart" aria-label="index — jump to the step that explains it">
-            <rect class="bx-sig xsbox" x="212" y="60" width="102" height="62" rx="2"/>
-            <text class="t-lbl t-ink" x="263" y="98" text-anchor="middle">index</text>
-            <text class="xsnum" x="219" y="74">3</text>
-            <line class="ln xstick" x1="263" y1="126" x2="263" y2="142"/>
-            <text class="t-sm t-sig" x="263" y="158" text-anchor="middle">index</text>
-            <text class="t-lbl" x="263" y="176" text-anchor="middle" data-f="xsIdx"></text>
-          </a>
-          <a href="#s4" class="xspart" aria-label="weights — jump to the step that explains it">
-            <rect class="bx-brs xsbox" x="316" y="60" width="403" height="62" rx="2"/>
-            <text class="t-lbl t-ink" x="517" y="90" text-anchor="middle">the numbers</text>
-            <text class="t-lbl" x="517" y="106" text-anchor="middle">every table, back to back</text>
-            <text class="xsnum" x="323" y="74">4</text>
-            <line class="ln xstick" x1="517" y1="126" x2="517" y2="142"/>
-            <text class="t-sm t-brs" x="517" y="158" text-anchor="middle">weights</text>
-            <text class="t-lbl t-ink" x="517" y="176" text-anchor="middle" data-f="xsData"></text>
-          </a>
-
-          <line class="ln-dash" x1="316" y1="188" x2="719" y2="188"/>
-          <text class="t-sm" x="517" y="204" text-anchor="middle" data-f="xsPct"></text>
-          <text class="t-sm xshint" x="0" y="204">in file order · click a part</text>
-        </svg>
+        <div class="drill">
+          <nav class="dcrumb" id="dcrumb" aria-label="Breadcrumb"></nav>
+          <div class="druler"><span>byte 0</span><span id="drulerEnd"></span></div>
+          <div class="dbar" id="dbar"></div>
+          <p class="dnote" id="dnote"></p>
+        </div>
         <figcaption data-f="xscap"></figcaption>
       </figure>
       <p>That label is also all a program needs. Models used to ship as a folder — settings here,
@@ -2012,6 +1999,140 @@ window.__files = F;
       };
     })();
 
+
+    /* ---------------- drillable cross-section ---------------- */
+    var drill = (function () {
+      var bar = document.getElementById("dbar"),
+          crumb = document.getElementById("dcrumb"),
+          note = document.getElementById("dnote"),
+          rulerEnd = document.getElementById("drulerEnd");
+      var tree = null, path = [];
+
+      function sz(b) {
+        if (b >= 1e12) return (b / 1e12).toFixed(2) + " TB";
+        if (b >= 1e9)  return (b / 1e9).toFixed(2) + " GB";
+        if (b >= 1e6)  return (b / 1e6).toFixed(2) + " MB";
+        if (b >= 1e3)  return (b / 1e3).toFixed(1) + " KB";
+        return Math.round(b) + " B";
+      }
+
+      /* Build the whole tree up front from the selected model. */
+      function build(m, d, ex, nsh) {
+        var F = window.__files || {};
+        var file = m.id === "k3" ? F.k3 : F.gemma;   /* parsed source for sub-splits */
+        var hdr = ex ? ex.header : 24;
+        var meta = ex ? ex.meta : m.meta;
+        var idx = d.index, blob = d.blob;
+
+        /* header: fixed by the format, four fields */
+        var headerParts = [
+          { n: "magic", v: 4 * (nsh || 1), d: 'the four bytes "GGUF"' },
+          { n: "version", v: 4 * (nsh || 1), d: "format version — 3" },
+          { n: "tensor count", v: 8 * (nsh || 1), d: "how many tables follow" },
+          { n: "setting count", v: 8 * (nsh || 1), d: "how many key/value pairs" }
+        ];
+
+        /* metadata: measured key spans; every Gemma shares one tokenizer */
+        var metaParts = null, metaNote = "";
+        if (file && file.meta) {
+          var scale = meta / (file.meta.reduce(function (a, r) { return a + r.b; }, 0) + file.metaRest);
+          metaParts = file.meta.map(function (r) {
+            return { n: r.k.replace("tokenizer.ggml.", "").replace("tokenizer.", ""),
+                     v: r.b * scale, d: "" };
+          }).concat([{ n: "everything else", v: file.metaRest * scale, d: "the model's shape and rope settings" }]);
+          metaNote = m.exact ? "Measured from the file."
+                             : "Measured on the 12B file — the Gemma 4 models share one tokenizer.";
+        }
+
+        /* index: one entry's own fields, from the real first record */
+        var idxParts = null, idxNote = "";
+        if (file && file.entry) {
+          idxParts = file.entry.g.map(function (g) {
+            return { n: g.l, v: g.b.length, d: String(g.v).slice(0, 40) };
+          });
+          idxNote = "One entry, " + file.entry.len + " bytes of it — there are " +
+                    (d.entries || file.nt) + " like this, back to back.";
+        }
+
+        /* weights: where the numbers actually go */
+        var wParts = (d.segs || []).map(function (s) {
+          return { n: s.n, v: s.v, d: "" };
+        });
+        var wScale = wParts.length ? blob / wParts.reduce(function (a, r) { return a + r.v; }, 0) : 1;
+        wParts.forEach(function (r) { r.v *= wScale; });
+
+        return {
+          n: "whole file", v: hdr + meta + idx + blob, note: "not to scale — the weights would leave nothing else visible",
+          kids: [
+            { n: "header", v: hdr, big: false, kids: headerParts,
+              note: "Fixed by the format: 24 bytes" + (nsh > 1 ? " in each of the " + nsh + " shards" : "") + "." },
+            { n: "metadata", v: meta, big: false, kids: metaParts, note: metaNote },
+            { n: "index", v: idx, big: false, kids: idxParts, note: idxNote },
+            { n: "weights", v: blob, big: true, kids: wParts.length ? wParts : null,
+              note: "Where the numbers go, summed across every layer." }
+          ]
+        };
+      }
+
+      function node() {
+        var n = tree;
+        path.forEach(function (i) { n = n.kids[i]; });
+        return n;
+      }
+
+      function draw() {
+        var cur = node(), kids = cur.kids || [];
+        var total = kids.reduce(function (a, k) { return a + k.v; }, 0) || 1;
+        var schematic = path.length === 0;   /* top level: weights would swallow everything */
+
+        /* widths: true share below the top level, floored so nothing vanishes */
+        var raw = kids.map(function (k) { return k.v / total * 100; });
+        var w = schematic ? [6, 22, 14, 58] : raw.map(function (p) { return Math.max(p, 4); });
+        var wsum = w.reduce(function (a, b) { return a + b; }, 0);
+        w = w.map(function (p) { return p / wsum * 100; });
+
+        bar.textContent = "";
+        kids.forEach(function (k, i) {
+          var can = !!(k.kids && k.kids.length);
+          var el = document.createElement(can ? "button" : "div");
+          el.className = "dseg" + (k.big ? " big" : "") + (can ? " can" : "");
+          el.style.width = w[i] + "%";
+          if (can) { el.type = "button"; el.title = "Open " + k.n; }
+          el.innerHTML =
+            '<div class="swatch"><span class="sname">' + k.n + "</span></div>" +
+            '<div class="smeta"><span class="ssize">' + sz(k.v) + "</span>" +
+            (k.d ? " · " + k.d : "") + "</div>";
+          if (can) el.addEventListener("click", function () { path.push(i); draw(); });
+          bar.appendChild(el);
+        });
+
+        /* breadcrumb */
+        crumb.textContent = "";
+        var trail = [tree], n = tree;
+        path.forEach(function (i) { n = n.kids[i]; trail.push(n); });
+        trail.forEach(function (t, i) {
+          if (i) crumb.appendChild(Object.assign(document.createElement("span"),
+                                                 { className: "sep", textContent: "›" }));
+          if (i === trail.length - 1) {
+            crumb.appendChild(Object.assign(document.createElement("span"),
+                                            { className: "here", textContent: t.n + " · " + sz(t.v) }));
+          } else {
+            var b = document.createElement("button");
+            b.type = "button"; b.textContent = t.n;
+            b.addEventListener("click", function () { path = path.slice(0, i); draw(); });
+            crumb.appendChild(b);
+          }
+        });
+
+        rulerEnd.textContent = sz(cur.v);
+        note.textContent = cur.note || "";
+      }
+
+      return {
+        load: function (m, d, ex, nsh) { tree = build(m, d, ex, nsh); path = []; draw(); }
+      };
+    })();
+
     var BANDWIDTH = 400; /* GB/s — a fast consumer GPU, order of magnitude */
 
     function group(n) { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f"); }
@@ -2096,6 +2217,7 @@ window.__files = F;
 
     function render(id) {
       var m = MODELS[id], d = derive(m);
+      m.id = id;
 
       set("layers", m.L);
       set("hidden", group(m.H) + " <small>per token</small>");
@@ -2124,24 +2246,14 @@ window.__files = F;
       set("lblob", "weights");
       set("meta", MB(ex ? ex.meta : m.meta));
 
-      /* hero cross-section — real sizes for whichever model is selected */
+      /* hero cross-section — a drillable view of the selected file */
+      drill.load(m, d, ex, nsh);
+
       var fileTotal = m.exact ? m.exact.total : 24 + m.meta + d.index + d.blob;
       var share = d.blob / fileTotal * 100;
-      var shareTxt = share > 99.99 ? "over 99.99%" : share.toFixed(2) + "%";
-      set("xsHdr", (ex ? ex.header : 24) + " B");
-      set("xsMeta", (m.meta / 1e6).toFixed(2) + " MB");
-      set("xsIdx", (d.index >= 1e6 ? (d.index / 1e6).toFixed(1) + " MB"
-                                   : (d.index / 1e3).toFixed(0) + " KB"));
-      set("xsData", d.blob >= 1e12 ? (d.blob / 1e12).toFixed(2) + " TB"
-                                   : (d.blob / 1e9).toFixed(2) + " GB");
-      set("xsPct", shareTxt + " of the file");
-      set("xsEnd", fileTotal >= 1e12 ? (fileTotal / 1e12).toFixed(2) + " TB"
-                                     : (fileTotal / 1e9).toFixed(2) + " GB");
-      set("xsVocab", "+ " + (m.vocab / 1024) + "K words");
       set("xscap", m.label + " in one picture. <b>" +
-        (share > 99.99 ? "Over 99.99%" : share.toFixed(1) + "%") + " of it is weights</b> — the rest is a small " +
-        "label on the front telling the program how to read them." +
-        (m.shardNote || ""));
+        (share > 99.99 ? "Over 99.99%" : share.toFixed(1) + "%") + " of it is weights</b> — "
+        + "click any part to open it up." + (m.shardNote || ""));
       set("index", (d.index >= 1e6 ? MB(d.index) : KB(d.index)) + (ex ? "" : " <span class='u'>≈</span>"));
       set("blob", GB(d.blob));
       set("q4size", GB(d.q4));
