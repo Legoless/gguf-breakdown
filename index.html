@@ -484,6 +484,11 @@ table{border-collapse:collapse}
     color:var(--paper);border:1px solid var(--signal);border-radius:3px;
     padding:8px 12px;cursor:pointer;line-height:1}
 
+  ul.plain{max-width:var(--measure);margin:0 0 var(--s2);padding-left:1.1rem;
+    list-style:none}
+  ul.plain li{position:relative;margin-bottom:7px;text-wrap:pretty}
+  ul.plain li::before{content:"—";position:absolute;left:-1.1rem;color:var(--signal)}
+
   /* ---------- optional deep dive ---------- */
   .deep{margin-top:var(--s5);border-top:2px solid var(--rule);padding-top:var(--s4)}
   .deep>summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:5px;
@@ -820,22 +825,9 @@ table{border-collapse:collapse}
 
       <h1>One file,<br>one <em>word</em> at a time.</h1>
 
-      <p class="lede">A GGUF file is a language model on disk — <strong>weights, settings and vocabulary in a single blob</strong>. This is what happens between opening it and the first word coming out.</p>
+      <p class="lede">A GGUF file is a language model saved to disk. Five steps is the whole of it — what the file contains, and what a program does with it to produce a word.</p>
 
-      <dl class="primer">
-        <div>
-          <dt>The model</dt>
-          <dd>A few hundred <b>giant tables of numbers</b>. Text goes in as numbers, gets multiplied through every table, and a next-word guess comes out.</dd>
-        </div>
-        <div>
-          <dt>The numbers</dt>
-          <dd>Billions of them. Stored <b>squeezed down to 4 bits each</b> so the whole thing fits in memory.</dd>
-        </div>
-        <div>
-          <dt>The catch</dt>
-          <dd>Every number gets read <b>once per word produced</b>. That's a bandwidth problem, not a math problem.</dd>
-        </div>
-      </dl>
+
 
       <div class="statgrid">
           <div><div class="k">Layers</div><div class="v" data-f="layers"></div></div>
@@ -846,6 +838,28 @@ table{border-collapse:collapse}
           <div><div class="k">Read per word</div><div class="v" data-f="active"></div></div>
         </div>
 
+
+    </header>
+
+    <!-- ================= SELECTOR ================= -->
+
+      <div class="statgrid">
+          <div><div class="k">Layers</div><div class="v" data-f="layers"></div></div>
+          <div><div class="k">Width</div><div class="v" data-f="hidden"></div></div>
+          <div><div class="k">Vocabulary</div><div class="v" data-f="vocab"></div></div>
+          <div><div class="k">Context</div><div class="v" data-f="ctx"></div></div>
+          <div><div class="k">Weight count</div><div class="v" data-f="total"></div></div>
+          <div><div class="k">Read per word</div><div class="v" data-f="active"></div></div>
+        </div>
+
+    <!-- ================= 01 ================= -->
+    <section class="step" id="s1">
+      <div class="eyebrow"><span class="n">01</span><span>What it is</span></div>
+      <h2>A file in two parts</h2>
+      <p>Open a GGUF file and there are only two things inside. At the front, a small
+      <b>label</b> — a few megabytes saying what the model is and where everything sits. After
+      that, the <b>numbers</b>: every table of weights, back to back, and nothing else.</p>
+      <p>The label is under a thousandth of the file. All the rest is the model itself.</p>
       <figure class="rise fig-lead">
         <svg viewBox="0 0 720 210" role="img" aria-label="Cross-section of a GGUF file: a small header, a metadata section, a tensor index, and a very large block of weight data.">
           <!-- ruler -->
@@ -895,17 +909,9 @@ table{border-collapse:collapse}
         </svg>
         <figcaption data-f="xscap"></figcaption>
       </figure>
-    </header>
-
-    <!-- ================= SELECTOR ================= -->
-
-    <!-- ================= 01 ================= -->
-    <section class="step" id="s1">
-      <div class="eyebrow"><span class="n">01</span><span>One file</span></div>
-      <h2>Everything in one place</h2>
-      <p>Models used to ship as a folder: config here, vocabulary there, weights split across numbered files, plus a script to glue it together. GGUF puts all of it in <b>one file that describes itself</b>.</p>
-      <p>Open it, read the first four bytes — <code>GGUF</code> — and you know what you have.</p>
-
+      <p>That label is also all a program needs. Models used to ship as a folder — settings here,
+      vocabulary there, weights split across numbered files, plus a script to glue them together.
+      A GGUF carries its own instructions, so one program can run a model it has never seen.</p>
       <figure class="rise">
         <svg viewBox="0 0 720 200" role="img" aria-label="Before: six separate files plus a script. After: one GGUF file.">
           <text class="t-sm" x="0" y="14">before</text>
@@ -929,16 +935,21 @@ table{border-collapse:collapse}
           <text class="t-lbl" x="553" y="124" text-anchor="middle">settings · vocabulary · every weight</text>
           <text class="t-sm t-sig" x="553" y="150" text-anchor="middle">no script required</text>
         </svg>
-        <figcaption>The file carries its own instructions, so <b>one program can run many different models</b> without knowing anything about them in advance.</figcaption>
-      </figure>
-    </section>
+        <figcaption>One file to download, one file to open, and <b>nothing to keep in sync</b>.</figcaption>
+      </figure>    </section>
+
 
     <!-- ================= 02 ================= -->
     <section class="step" id="s2">
-      <div class="eyebrow"><span class="n">02</span><span>The label at the front</span></div>
-      <h2>A label at the front</h2>
-      <p>Next comes a list of key–value pairs — a few kilobytes describing the model's shape and how to turn text into numbers. The program reads this and now knows <b>what to build</b>.</p>
-
+      <div class="eyebrow"><span class="n">02</span><span>The label</span></div>
+      <h2>What the label says</h2>
+      <p>It is a plain list of keys and values. Three kinds of thing live in it:</p>
+      <ul class="plain">
+        <li><b>the shape</b> — how many layers, how wide, how the pieces connect</li>
+        <li><b>the vocabulary</b> — every token the model knows, written out as text</li>
+        <li><b>the index</b> — every table of numbers by name, and the exact byte it starts at</li>
+      </ul>
+      <p>Nothing about the model is built into the program. Change the file, change the model.</p>
       <figure class="rise">
         <svg viewBox="0 0 720 232" role="img" aria-label="Metadata key-value pairs on the left feeding three conclusions on the right.">
           <rect class="bx" x="0" y="10" width="300" height="212" rx="3"/>
@@ -962,37 +973,10 @@ table{border-collapse:collapse}
           <rect class="bx-sig" x="396" y="152" width="324" height="40" rx="2"/>
           <text class="t-lbl t-ink" x="412" y="177">how to turn your text into numbers</text>
         </svg>
-        <figcaption>Nothing is hardcoded in the program. <b>Change the file, change the model</b> — the same binary handles both.</figcaption>
+        <figcaption>Read the list on the left and you know <b>how many layers to build, how much memory to reserve, and how to turn text into tokens</b>.</figcaption>
       </figure>
-    
-      <p>After the settings comes a directory: every table of numbers by name, its size, and <b>the exact byte where it starts</b>. Think of a zip file's central directory.</p>
-
-      <figure class="rise">
-        <svg viewBox="0 0 720 200" role="img" aria-label="Index entries with names and byte offsets pointing into positions in the weight blob.">
-          <text class="t-sm" x="0" y="14">index entry</text>
-          <rect class="bx" x="0" y="26" width="290" height="26" rx="2"/>
-          <text class="t-lbl t-ink" x="12" y="43">layer 0 · attention</text><text class="t-lbl t-sig" x="278" y="43" text-anchor="end">@ 0x0000</text>
-          <rect class="bx" x="0" y="58" width="290" height="26" rx="2"/>
-          <text class="t-lbl t-ink" x="12" y="75">layer 0 · feed-forward</text><text class="t-lbl t-sig" x="278" y="75" text-anchor="end">@ 0x2A00</text>
-          <rect class="bx" x="0" y="90" width="290" height="26" rx="2"/>
-          <text class="t-lbl t-ink" x="12" y="107">layer 1 · attention</text><text class="t-lbl t-sig" x="278" y="107" text-anchor="end">@ 0x9C00</text>
-          <rect class="bx" x="0" y="122" width="290" height="26" rx="2"/>
-          <text class="t-lbl" x="12" y="139">… 290 more</text>
-
-          <path class="ln-sig" d="M 292 39  C 340 39,  340 96, 396 96"/>
-          <path class="ln-sig" d="M 292 71  C 340 71,  340 96, 470 96"/>
-          <path class="ln-sig" d="M 292 103 C 340 103, 340 96, 560 96"/>
-
-          <rect class="bx-brs" x="396" y="82" width="324" height="30" rx="2"/>
-          <line class="ln-brs" x1="470" y1="82" x2="470" y2="112"/>
-          <line class="ln-brs" x1="560" y1="82" x2="560" y2="112"/>
-          <line class="ln-brs" x1="640" y1="82" x2="640" y2="112"/>
-          <text class="t-sm t-brs" x="396" y="72">the weights, back to back</text>
-          <text class="t-sm" x="720" y="132" text-anchor="end">no gaps · no parsing · just offsets</text>
-        </svg>
-        <figcaption>Because everything is at a known offset, finding a table is <b>arithmetic, not searching</b>.</figcaption>
-      </figure>
-    
+      <p>The <b>index</b> is the part the next step depends on. Every table has an exact address,
+      so finding one is arithmetic rather than searching — the same trick a zip file uses.</p>
       <div class="panel">
             <h3>Where the file goes</h3>
             <table class="kv">
@@ -1007,6 +991,7 @@ table{border-collapse:collapse}
             <p class="note" data-f="wherenote"></p>
           </div>
     </section>
+
 
     <!-- ================= 03 ================= -->
 
