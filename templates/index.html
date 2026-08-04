@@ -417,14 +417,14 @@
   .qlist { display: flex; flex-direction: column; gap: 5px; }
   .qrow {
     display: grid;
-    grid-template-columns: 92px 1fr 74px;
+    grid-template-columns: minmax(96px, 132px) 1fr 82px;
     align-items: center;
     gap: var(--s2);
     font-family: var(--f-mono);
     font-size: 12.5px;
   }
-  .qrow .qn { color: var(--ink); }
-  .qrow .qs { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .qrow .qn { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qrow .qs { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .qbar { height: 15px; border-radius: 2px; background: var(--signal-dim); border: 1px solid var(--signal); }
   .qrow.hot .qn { color: var(--signal); }
   .qrow.hot .qs { color: var(--signal); }
@@ -467,17 +467,19 @@
     display:flex;align-items:center;gap:var(--s2);overflow-x:auto}
   .mblabel{font-family:var(--f-mono);font-size:9.5px;text-transform:uppercase;
     letter-spacing:.18em;color:var(--muted);flex:none}
-  .mbtabs{display:flex;gap:5px;flex:1}
-  .mbtabs button{font-family:var(--f-mono);font-size:11.5px;white-space:nowrap;
-    color:var(--muted);background:none;border:1px solid var(--rule);border-radius:3px;
-    padding:7px 11px;cursor:pointer;line-height:1;
-    transition:color .16s,border-color .16s,background .16s}
-  .mbtabs button:hover{color:var(--ink);border-color:var(--muted)}
-  .mbtabs button:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
-  .mbtabs button[aria-selected="true"]{background:var(--signal);border-color:var(--signal);
-    color:var(--paper)}
-  .mbtabs .fam{opacity:.6;margin-right:5px}
-  .mbtabs button[aria-selected="true"] .fam{opacity:.8}
+  .mbselect{position:relative;display:inline-flex;align-items:center}
+  .mbselect select{font-family:var(--f-mono);font-size:13px;color:var(--paper);
+    background:var(--signal);border:1px solid var(--signal);border-radius:3px;
+    padding:8px 34px 8px 12px;cursor:pointer;line-height:1.2;
+    -webkit-appearance:none;appearance:none;max-width:min(64vw,340px)}
+  .mbselect select:hover{filter:brightness(1.08)}
+  .mbselect select:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .mbselect select option{background:var(--paper);color:var(--ink)}
+  .mbselect::after{content:"";position:absolute;right:13px;pointer-events:none;
+    width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;
+    border-top:5px solid var(--paper)}
+  .mbnote{font-family:var(--f-mono);font-size:11px;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   /* no byte-level teardown for this variant */
   .nofile{max-width:var(--measure);margin-top:var(--s3);padding:var(--s3);
@@ -769,13 +771,20 @@
 <div class="modelbar">
   <div class="mbinner">
     <span class="mblabel">Model</span>
-    <div class="mbtabs" role="tablist" aria-label="Model">
-      <button role="tab" aria-selected="false" data-model="e4b"><span class="fam">Gemma 4</span>E4B</button>
-      <button role="tab" aria-selected="true"  data-model="12b"><span class="fam">Gemma 4</span>12B</button>
-      <button role="tab" aria-selected="false" data-model="31b"><span class="fam">Gemma 4</span>31B</button>
-      <button role="tab" aria-selected="false" data-model="a4b"><span class="fam">Gemma 4</span>26B A4B</button>
-      <button role="tab" aria-selected="false" data-model="k3"><span class="fam">Moonshot</span>Kimi K3</button>
-    </div>
+    <span class="mbselect">
+      <select id="modelselect" aria-label="Model">
+        <optgroup label="Google · Gemma 4">
+          <option value="e4b">Gemma 4 · E4B</option>
+          <option value="12b" selected>Gemma 4 · 12B</option>
+          <option value="31b">Gemma 4 · 31B</option>
+          <option value="a4b">Gemma 4 · 26B A4B</option>
+        </optgroup>
+        <optgroup label="Moonshot">
+          <option value="k3">Kimi K3</option>
+        </optgroup>
+      </select>
+    </span>
+    <span class="mbnote" id="mbnote"></span>
   </div>
 </div>
 
@@ -938,7 +947,7 @@
         <div class="panel" style="margin-top: var(--s3);">
           <h3>Every download, same model</h3>
           <div class="qlist" data-f="quants"></div>
-          <p class="note">Real file sizes. <b>Q4_K_M</b> works out to about <b data-f="bpw"></b> bits per weight — not 4, because the sensitive tables keep more.</p>
+          <p class="note" data-f="ladnote"></p>
         </div>
 
       </div>
@@ -1409,8 +1418,8 @@
     <section class="partbreak p2" id="part2">
       <div class="plabel">Part two</div>
       <h2>Inside two real files</h2>
-      <p class="lede">Everything above is how the format works. This is what is actually in
-      two real downloads — read out of their bytes, nothing estimated.</p>
+      <p class="lede">Everything above is how the format works. This is what is actually
+      inside the file you picked — read out of its bytes, nothing estimated.</p>
       <div class="nofile" id="nofile" hidden>
         <p>No byte-level teardown for <b id="nofileName"></b>. Only two files were parsed:
         <b>Gemma 4 12B</b> at Q4_K_M and the full original <b>Kimi K3</b> — picking either
@@ -2256,10 +2265,16 @@ window.__files = F;
         var cls = r[0] === ref ? " hot" : (r[0] === "BF16" ? " big" : "");
         return '<div class="qrow' + cls + '"><span class="qn">' + r[0] +
                '</span><span class="qbar" style="width:' + pct.toFixed(1) + '%"></span>' +
-               '<span class="qs">' + r[1].toFixed(2) + ' GB</span></div>';
+               '<span class="qs">' + (r[1] >= 1000 ? (r[1]/1000).toFixed(2) + ' TB'
+                                                   : r[1].toFixed(2) + ' GB') + '</span></div>';
       }).join(""));
-      set("bpw", d.bpw.toFixed(2));
       set("q4label", (m.reference || "Q4_K_M") + " download");
+      set("ladnote", m.noFullPrecision
+        ? "Real file sizes. <b>" + m.reference + "</b> is the one Moonshot published — everything " +
+          "else in the list is a re-packing of it, and none is larger. It works out to <b>" +
+          d.bpw.toFixed(2) + "</b> bits per weight: 4 for the experts, 16 for the attention left untouched."
+        : "Real file sizes. <b>Q4_K_M</b> works out to about <b>" + d.bpw.toFixed(2) +
+          "</b> bits per weight — not 4, because the sensitive tables keep more.");
 
       /* bandwidth figure */
       var fullB, q4B, cap;
@@ -2347,14 +2362,18 @@ window.__files = F;
   var FILE_FOR = { "12b": "gemma", "k3": "k3" };
   var NAME = { "e4b": "Gemma 4 E4B", "12b": "Gemma 4 12B", "31b": "Gemma 4 31B",
                "a4b": "Gemma 4 26B A4B", "k3": "Kimi K3" };
-  var btns = Array.prototype.slice.call(document.querySelectorAll(".mbtabs button"));
+  var sel = document.getElementById("modelselect");
+  var SUB = { "e4b": "phone-sized · 4.98 GB", "12b": "the default · 7.12 GB",
+              "31b": "workstation · 18.3 GB", "a4b": "mixture of experts · 16.9 GB",
+              "k3": "2.8 trillion weights · 1.56 TB · four shards" };
   var part2 = ["part2"].concat(
     Array.prototype.map.call(document.querySelectorAll('section[id^="sec-"]'),
       function(s){ return s.id; }));
   var notice = document.getElementById("nofile");
 
   function select(id){
-    btns.forEach(function(b){ b.setAttribute("aria-selected", String(b.dataset.model === id)); });
+    if (sel.value !== id) sel.value = id;
+    document.getElementById("mbnote").textContent = SUB[id] || "";
     window.__renderModel(id);
 
     var file = FILE_FOR[id];
@@ -2376,9 +2395,7 @@ window.__files = F;
     try { history.replaceState(null, "", "#" + id); } catch (e) {}
   }
 
-  btns.forEach(function(b){
-    b.addEventListener("click", function(){ select(b.dataset.model); });
-  });
+  sel.addEventListener("change", function(){ select(sel.value); });
   document.getElementById("nofileSwitch").addEventListener("click", function(){
     select("12b");
     document.getElementById("part2").scrollIntoView({ behavior: "smooth", block: "start" });
