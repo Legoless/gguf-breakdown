@@ -903,14 +903,14 @@ table{border-collapse:collapse}
             <h3>Where the file goes</h3>
             <table class="kv">
               <tbody>
-                <tr><td>header</td><td>24 <span class="u">B</span></td></tr>
-                <tr><td>metadata + vocabulary</td><td data-f="meta"></td></tr>
-                <tr><td>tensor index</td><td data-f="index"></td></tr>
-                <tr><td>weights</td><td data-f="blob"></td></tr>
+                <tr><td data-f="lhdr"></td><td data-f="hdrsize"></td></tr>
+                <tr><td data-f="lmeta"></td><td data-f="meta"></td></tr>
+                <tr><td data-f="lindex"></td><td data-f="index"></td></tr>
+                <tr><td data-f="lblob"></td><td data-f="blob"></td></tr>
                 <tr class="tot"><td data-f="q4label"></td><td data-f="q4size"></td></tr>
               </tbody>
             </table>
-            <p class="note">Measured on the real 12B file: <b>15.78 MB</b>, of which <b>9.25 MB</b> is merge rules and 4.41 MB is the <b data-f="vocabshort"></b>-entry vocabulary. The whole family shares one tokenizer.</p>
+            <p class="note" data-f="wherenote"></p>
           </div>
 
           <div class="panel">
@@ -2093,8 +2093,9 @@ window.__files = F;
       var F = window.__files; if (!F || !F.k3) return;
       if (MODELS["12b"]) {
         MODELS["12b"].meta = F.gemma.metaBytes;
-        MODELS["12b"].exact = { index: F.gemma.indexBytes, blob: F.gemma.tensorBytes,
-                                total: F.gemma.fileBytes };
+        MODELS["12b"].exact = { header: 24, meta: F.gemma.metaBytes,
+                                index: F.gemma.indexBytes, blob: F.gemma.tensorBytes,
+                                total: F.gemma.fileBytes, shards: 1 };
       }
       var k = F.k3, layer = k.layers[1], anat = {};
       k.anatomy.rows.forEach(function (r) { anat[r.l] = r.b; });
@@ -2107,8 +2108,13 @@ window.__files = F;
         reference: "mxfp4 (original)",
         noFullPrecision: true,
         shardNote: " These are shard 1 of 4 — only the first carries the settings and vocabulary.",
-        exact: { index: k.indexBytes, blob: k.shardTable[0].data,
-                 total: k.shardTable[0].file },
+        exact: (function () {
+          var st = k.shardTable, sum = function (f) {
+            return st.reduce(function (a, r) { return a + r[f]; }, 0);
+          };
+          return { header: sum("hdr"), meta: sum("meta"), index: sum("index"),
+                   blob: sum("data"), total: k.shardTotal, shards: st.length };
+        })(),
         measured: {
           rows: [["attention", anat["Attention"] + anat["Linear-attention machinery"]],
                  ["896 experts, stacked", anat["The 896 experts"]],
@@ -2135,7 +2141,10 @@ window.__files = F;
     function Pshort(n) {
       return n >= 1e9 ? (n / 1e9).toFixed(2) + " billion" : (n / 1e6).toFixed(0) + " million";
     }
-    function GB(bytes) { return (bytes / 1e9).toFixed(2) + " <span class='u'>GB</span>"; }
+    function GB(bytes) {
+      return bytes >= 1e12 ? (bytes / 1e12).toFixed(3) + " <span class='u'>TB</span>"
+                           : (bytes / 1e9).toFixed(2) + " <span class='u'>GB</span>";
+    }
     function MB(bytes) { return (bytes / 1e6).toFixed(1) + " <span class='u'>MB</span>"; }
     function KB(bytes) { return (bytes / 1e3).toFixed(0) + " <span class='u'>KB</span>"; }
 
@@ -2213,7 +2222,14 @@ window.__files = F;
       set("total", (m.total / 1e9).toFixed(1) + " <small>B</small>");
       set("active", (m.active / 1e9).toFixed(1) + " <small>B</small>");
 
-      set("meta", MB(m.meta));
+      var ex = m.exact, nsh = ex && ex.shards > 1 ? ex.shards : 0;
+      var per = nsh ? " <span class='u'>× " + nsh + "</span>" : "";
+      set("lhdr", nsh ? "headers (" + nsh + " files)" : "header");
+      set("hdrsize", (ex ? ex.header : 24) + " <span class='u'>B</span>");
+      set("lmeta", "metadata + vocabulary");
+      set("lindex", nsh ? "tensor indexes" : "tensor index");
+      set("lblob", "weights");
+      set("meta", MB(ex ? ex.meta : m.meta));
 
       /* hero cross-section — real sizes for whichever model is selected */
       var fileTotal = m.exact ? m.exact.total : 24 + m.meta + d.index + d.blob;
@@ -2233,9 +2249,16 @@ window.__files = F;
         (share > 99.99 ? "Over 99.99%" : share.toFixed(1) + "%") + " of it is weights</b> — the rest is a small " +
         "label on the front telling the program how to read them." +
         (m.shardNote || ""));
-      set("index", KB(d.index) + " <span class='u'>≈</span>");
+      set("index", (d.index >= 1e6 ? MB(d.index) : KB(d.index)) + (ex ? "" : " <span class='u'>≈</span>"));
       set("blob", GB(d.blob));
       set("q4size", GB(d.q4));
+      set("wherenote", ex
+        ? ("Measured on the real file" + (nsh ? "s — all " + nsh + " shards summed" : "") +
+           ". Metadata is <b>" + MB(ex.meta).replace(/<[^>]*>/g, "").trim() +
+           "</b>, almost all of it the " + group(m.vocab) + "-entry vocabulary and its merge rules." +
+           (nsh ? " Only shard 1 carries them; the other three hold 82 bytes each." : ""))
+        : ("Estimated: this variant was not downloaded, so the index is derived from its layer " +
+           "count and the metadata is taken from the 12B file — the whole family shares one tokenizer."));
       set("vocabshort", group(m.vocab));
 
       if (d.rows) {
