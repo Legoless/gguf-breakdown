@@ -985,11 +985,11 @@ table{border-collapse:collapse}
           <text class="t-sm t-sig" x="16" y="34">key → value</text>
           <line class="ln" x1="16" y1="44" x2="284" y2="44"/>
 
-          <text class="t-lbl t-ink" x="16" y="70">family</text>       <text class="t-lbl" x="284" y="70" text-anchor="end">llama</text>
-          <text class="t-lbl t-ink" x="16" y="96">layers</text>       <text class="t-lbl" x="284" y="96" text-anchor="end">32</text>
-          <text class="t-lbl t-ink" x="16" y="122">width</text>       <text class="t-lbl" x="284" y="122" text-anchor="end">4096</text>
-          <text class="t-lbl t-ink" x="16" y="148">memory span</text> <text class="t-lbl" x="284" y="148" text-anchor="end">8192 words</text>
-          <text class="t-lbl t-ink" x="16" y="174">vocabulary</text>  <text class="t-lbl" x="284" y="174" text-anchor="end">128 256 entries</text>
+          <text class="t-lbl t-ink" x="16" y="70">family</text>       <text class="t-lbl" x="284" y="70" text-anchor="end" data-f="msArch"></text>
+          <text class="t-lbl t-ink" x="16" y="96">layers</text>       <text class="t-lbl" x="284" y="96" text-anchor="end" data-f="msLayers"></text>
+          <text class="t-lbl t-ink" x="16" y="122">width</text>       <text class="t-lbl" x="284" y="122" text-anchor="end" data-f="msWidth"></text>
+          <text class="t-lbl t-ink" x="16" y="148">memory span</text> <text class="t-lbl" x="284" y="148" text-anchor="end" data-f="msCtx"></text>
+          <text class="t-lbl t-ink" x="16" y="174">vocabulary</text>  <text class="t-lbl" x="284" y="174" text-anchor="end" data-f="msVocab"></text>
           <text class="t-lbl t-ink" x="16" y="200">chat format</text> <text class="t-lbl" x="284" y="200" text-anchor="end">template string</text>
 
           <path class="ln-sig" d="M 300 116 L 330 116 M 330 60 L 330 172 M 330 60 L 386 60 M 330 116 L 386 116 M 330 172 L 386 172"/>
@@ -1043,7 +1043,7 @@ table{border-collapse:collapse}
     <section class="step" id="s4">
       <div class="eyebrow"><span class="n">04</span><span>Map, don't load</span></div>
       <h2>The file is never really read</h2>
-      <p>Here's the part that surprises people. The program doesn't copy 20 GB into memory. It calls <code>mmap</code> — <b>the file gets an address range, and pages arrive only when touched</b>.</p>
+      <p>Here's the part that surprises people. The program doesn't copy <b data-f="mmSize"></b> into memory. It calls <code>mmap</code> — <b>the file gets an address range, and pages arrive only when touched</b>.</p>
       <p>The bytes on disk are already in the exact layout the math wants, so there's no conversion step. Nothing to parse, nothing to rearrange.</p>
 
       <figure class="rise">
@@ -1074,14 +1074,14 @@ table{border-collapse:collapse}
           </g>
 
           <rect class="bx-brs" x="0" y="140" width="720" height="34" rx="2"/>
-          <text class="t-lbl t-brs" x="360" y="162" text-anchor="middle">model.gguf on disk</text>
+          <text class="t-lbl t-brs" x="360" y="162" text-anchor="middle" data-f="mmFile"></text>
 
           <line class="ln" x1="0" y1="196" x2="720" y2="196"/>
           <text class="t-sm t-ink" x="0" y="216">first run: seconds</text>
           <text class="t-sm t-ink" x="240" y="216">second run: instant</text>
           <text class="t-sm t-ink" x="480" y="216">two programs share the same pages</text>
         </svg>
-        <figcaption>Loading a 20 GB model is <b>pointer arithmetic</b>. The operating system's page cache does the rest.</figcaption>
+        <figcaption data-f="mmcap"></figcaption>
       </figure>
 
       <div class="take"><span>Note</span><span>This is the same trick a database uses for its data files. Nothing AI-specific about it — it just matters more when the file is enormous.</span></div>
@@ -1158,7 +1158,7 @@ table{border-collapse:collapse}
           <text class="t-big t-ink" x="720" y="176" text-anchor="end">18 bytes</text>
           <text class="t-sm t-sig" x="720" y="200" text-anchor="end">3.6× smaller</text>
         </svg>
-        <figcaption>A <b>16 GB model becomes about 4.5 GB</b> — the difference between fitting on your machine and not.</figcaption>
+        <figcaption data-f="qzcap"></figcaption>
       </figure>
 
       <p>Not everything gets squeezed equally. A few tables are more sensitive than the rest, so they're kept at higher precision — the file mixes formats table by table.</p>
@@ -2056,28 +2056,28 @@ window.__files = F;
             parameter totals and GGUF file sizes as published. ---- */
     var MODELS = {
       "12b": {
-        label: "Gemma 4 12B", L: 48, H: 3840, nh: 16, nkv: 8, hd: 256, ffn: 15360,
+        label: "Gemma 4 12B", arch: "gemma4", name: "gemma-4-12b-it-Q4_K_M.gguf", L: 48, H: 3840, nh: 16, nkv: 8, hd: 256, ffn: 15360,
         vocab: 262144, ctx: 262144, win: 1024, fullEvery: 6,
         total: 11.95e9, active: 11.95e9, meta: 15.78e6,
         q: [["Q2_K_XL", 4.66], ["Q3_K_M", 5.69], ["Q4_K_M", 7.12], ["Q5_K_M", 8.41],
             ["Q6_K", 9.79], ["Q8_0", 12.7], ["BF16", 23.8]]
       },
       "e4b": {
-        label: "Gemma 4 E4B", L: 42, H: 2560, nh: 8, nkv: 2, hd: 256, ffn: 10240,
+        label: "Gemma 4 E4B", arch: "gemma4", name: "gemma-4-E4B-it-Q4_K_M.gguf", L: 42, H: 2560, nh: 8, nkv: 2, hd: 256, ffn: 10240,
         vocab: 262144, ctx: 131072, win: 512, fullEvery: 6, ple: 256,
         total: 8.0e9, active: 4.5e9, meta: 15.78e6,
         q: [["Q2_K_XL", 3.76], ["Q3_K_M", 4.06], ["Q4_K_M", 4.98], ["Q5_K_M", 5.48],
             ["Q6_K", 7.07], ["Q8_0", 8.19], ["BF16", 15.1]]
       },
       "31b": {
-        label: "Gemma 4 31B", L: 60, H: 5376, nh: 32, nkv: 16, hd: 256, ffn: 21504,
+        label: "Gemma 4 31B", arch: "gemma4", name: "gemma-4-31B-it-Q4_K_M.gguf", L: 60, H: 5376, nh: 32, nkv: 16, hd: 256, ffn: 21504,
         vocab: 262144, ctx: 262144, win: 1024, fullEvery: 6,
         total: 30.7e9, active: 30.7e9, meta: 15.78e6,
         q: [["Q2_K_XL", 11.8], ["Q3_K_M", 14.7], ["Q4_K_M", 18.3], ["Q5_K_M", 21.7],
             ["Q6_K", 25.2], ["Q8_0", 32.6], ["BF16", 61.4]]
       },
       "a4b": {
-        label: "Gemma 4 26B A4B", L: 30, H: 2816, nh: 16, nkv: 8, hd: 256, ffn: 2112,
+        label: "Gemma 4 26B A4B", arch: "gemma4", name: "gemma-4-26B-A4B-it-Q4_K_M.gguf", L: 30, H: 2816, nh: 16, nkv: 8, hd: 256, ffn: 2112,
         vocab: 262144, ctx: 262144, win: 1024, fullEvery: 6,
         moeFfn: 704, experts: 128, topk: 8,
         total: 25.2e9, active: 3.8e9, meta: 15.78e6,
@@ -2102,7 +2102,7 @@ window.__files = F;
       var embed = 0;
       k.extra.forEach(function (t) { if (t.n.indexOf("token_embd") === 0) embed = t.b; });
       MODELS.k3 = {
-        label: "Kimi K3", L: 93, H: 7168, vocab: 163840, ctx: 1048576,
+        label: "Kimi K3", arch: "kimi-k3", name: "Kimi-K3-mxfp4-00001-of-00004.gguf", L: 93, H: 7168, vocab: 163840, ctx: 1048576,
         total: k.expert.params, active: k.expert.activeParams, meta: k.metaBytes,
         q: k.ladder,
         reference: "mxfp4 (original)",
@@ -2218,12 +2218,19 @@ window.__files = F;
       set("layers", m.L);
       set("hidden", group(m.H));
       set("vocab", (m.vocab / 1024) + " <small>K</small>");
-      set("ctx", (m.ctx / 1024) + " <small>K words</small>");
+      set("ctx", (m.ctx >= 1048576 ? (m.ctx / 1048576) + " <small>M words</small>"
+                                     : (m.ctx / 1024) + " <small>K words</small>"));
       set("total", (m.total / 1e9).toFixed(1) + " <small>B</small>");
       set("active", (m.active / 1e9).toFixed(1) + " <small>B</small>");
 
       var ex = m.exact, nsh = ex && ex.shards > 1 ? ex.shards : 0;
       var per = nsh ? " <span class='u'>× " + nsh + "</span>" : "";
+      set("msArch", m.arch || "gemma4");
+      set("msLayers", m.L);
+      set("msWidth", group(m.H));
+      set("msCtx", (m.ctx >= 1048576 ? (m.ctx / 1048576) + "M" : (m.ctx / 1024) + "K") + " words");
+      set("msVocab", group(m.vocab) + " entries");
+
       set("lhdr", nsh ? "headers (" + nsh + " files)" : "header");
       set("hdrsize", (ex ? ex.header : 24) + " <span class='u'>B</span>");
       set("lmeta", "metadata + vocabulary");
@@ -2252,6 +2259,18 @@ window.__files = F;
       set("index", (d.index >= 1e6 ? MB(d.index) : KB(d.index)) + (ex ? "" : " <span class='u'>≈</span>"));
       set("blob", GB(d.blob));
       set("q4size", GB(d.q4));
+      var dl = m.exact ? m.exact.total : d.q4;
+      set("mmSize", GB(dl).replace(/<[^>]*>/g, "").trim());
+      set("mmFile", m.name || (m.label + ".gguf"));
+      set("mmcap", "Loading " + m.label + "'s <b>" + GB(dl).replace(/<[^>]*>/g, "").trim() +
+        "</b> is <b>pointer arithmetic</b>. The operating system's page cache does the rest." +
+        (nsh ? " Each of its " + nsh + " shards is mapped the same way." : ""));
+      set("qzcap", "For " + m.label + " that is <b>" +
+        (m.total * 2 / 1e9 >= 1000 ? (m.total * 2 / 1e12).toFixed(2) + " TB"
+                                   : (m.total * 2 / 1e9).toFixed(1) + " GB") +
+        " at 16 bits down to " + GB(dl).replace(/<[^>]*>/g, "").trim() +
+        "</b> — the difference between fitting on your machine and not.");
+
       set("wherenote", ex
         ? ("Measured on the real file" + (nsh ? "s — all " + nsh + " shards summed" : "") +
            ". Metadata is <b>" + MB(ex.meta).replace(/<[^>]*>/g, "").trim() +
