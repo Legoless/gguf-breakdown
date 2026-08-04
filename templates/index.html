@@ -2236,7 +2236,6 @@ window.__files = F;
            (nsh ? " Only shard 1 carries them; the other three hold 82 bytes each." : ""))
         : ("Estimated: this variant was not downloaded, so the index is derived from its layer " +
            "count and the metadata is taken from the 12B file — the whole family shares one tokenizer."));
-      set("vocabshort", group(m.vocab));
 
       if (d.rows) {
         ["q", "k", "v", "o"].forEach(function (slot, i) {
