@@ -445,6 +445,7 @@
   }
 
   .xcol{display:flex;flex-direction:column;gap:10px;min-width:0}
+  .xcol > .xcrumb,.xcol > .xfile{flex:0 0 auto}
   .xcrumb{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-family:var(--f-mono);
     font-size:11px;min-height:16px}
   .xcrumb button{background:none;border:0;padding:0;font:inherit;color:var(--signal);
@@ -454,7 +455,7 @@
   .xcrumb .sep{color:var(--muted);opacity:.5}
   .xcrumb .here{color:var(--ink)}
 
-  .xfile{display:flex;flex-direction:column;gap:6px}
+  .xfile{position:relative;isolation:isolate;display:flex;flex-direction:column;gap:6px}
   .xmark{font-family:var(--f-mono);font-size:10px;letter-spacing:.06em;color:var(--muted)}
   .xmark.xend{text-align:right;color:var(--ink)}
 
@@ -462,10 +463,13 @@
     border-left:1px solid var(--rule);padding-left:12px}
   @media (max-width:899px){.xstack{min-height:420px}}
 
-  .xflight{position:fixed!important;z-index:80;margin:0!important;min-height:0!important;
-    pointer-events:none;transform-origin:top left;overflow:hidden!important;
-    contain:layout paint;will-change:transform,opacity}
-  .xflight.xstack{max-height:none;background:var(--paper)}
+  .xmotion-stage{position:absolute;inset:0;z-index:20;overflow:visible;pointer-events:none}
+  .xmotion-content{position:absolute!important;margin:0!important;min-height:0!important;
+    max-height:none!important;box-sizing:border-box;contain:layout paint;background:var(--paper);
+    will-change:opacity}
+  .xmotion-shell{position:absolute!important;z-index:1;margin:0!important;min-height:0!important;
+    padding:0!important;box-sizing:border-box;background:var(--paper-2)!important;transition:none!important;
+    pointer-events:none;contain:layout paint;will-change:left,top,width,height,opacity}
   .xcol.moving{pointer-events:none}
 
   .xseg{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;
@@ -1857,7 +1861,7 @@ window.__files = F;
       var embed = 0;
       k.extra.forEach(function (t) { if (t.n.indexOf("token_embd") === 0) embed = t.b; });
       var ROLE_WHY = {
-        "experts (×896, stacked)": "The 896 routed expert sets; 16 run for each token.",
+        "experts (×896, stacked)": "The 896 stacked indices repeat independently through 92 expert-bearing layers.",
         "attention": "Weights that decide which earlier tokens matter.",
         "shared experts": "Expert weights that run for every token.",
         "linear-attention machinery": "Weights for the fixed-state attention layers.",
@@ -1885,7 +1889,10 @@ window.__files = F;
           layer: layer.b, embed: embed,
           segs: k.roles.slice(0, 5).map(function (r) {
             return { n: r.r, v: r.b, why: ROLE_WHY[r.r] };
-          }),
+          }).concat([{ n: "other weights",
+                       v: k.roles.slice(5).reduce(function (a, r) { return a + r.b; }, 0),
+                       why: "Vocabulary lookup and output weights, norms, router weights, and " +
+                            "layer 0's dense feed-forward tensors." }]),
           index: k.indexBytes, entries: k.nt,
           stored: k.expert.stored, read: k.expert.read,
           kv: 217e6 + 24 * 576 * 2 * 1048576,
@@ -1902,8 +1909,9 @@ window.__files = F;
       var stack = document.getElementById("xstack"),
           crumb = document.getElementById("xcrumb"),
           pane  = document.getElementById("xpane"),
-          col   = stack.closest(".xcol");
-      var root = null, path = [], modelId = null, moving = false;
+          col   = stack.closest(".xcol"),
+          file  = stack.parentNode;
+      var root = null, path = [], modelId = null, moving = false, finishMove = null, scrolls = {};
       var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
       function sz(b) {
@@ -1922,6 +1930,30 @@ window.__files = F;
       function whyList(node) {
         if (!node || !node.why) return [];
         return Array.isArray(node.why) ? node.why : [node.why];
+      }
+
+      function expertBands(first, count, step, unit) {
+        var out = [];
+        for (var start = first; start < first + count; start += step) {
+          var length = Math.min(step, first + count - start), end = start + length - 1;
+          if (step === 8) {
+            var slots = [];
+            for (var i = start; i <= end; i++) {
+              slots.push({ n: "expert slot " + String(i).padStart(3, "0"), v: unit, big: true,
+                why: "Gate, up, and down slices for this expert number across all 92 " +
+                     "expert-bearing model layers — 92 distinct expert modules." });
+            }
+            out.push({ n: "expert slots " + String(start).padStart(3, "0") + "–" +
+                           String(end).padStart(3, "0"), v: unit * length, big: true,
+                       why: "Eight exact expert slots; open one to inspect it.", kids: slots });
+          } else {
+            out.push({ n: "expert slots " + String(start).padStart(3, "0") + "–" +
+                           String(end).padStart(3, "0"), v: unit * length, big: true,
+                       why: "64 numbered slots; each repeats through 92 model layers.",
+                       kids: expertBands(start, length, 8, unit) });
+          }
+        }
+        return out;
       }
 
       function build(m, d, ex, nsh) {
@@ -1965,6 +1997,16 @@ window.__files = F;
         if (wKids.length) {
           var sc = blob / wKids.reduce(function (a, r) { return a + r.v; }, 0);
           wKids.forEach(function (r) { r.v *= sc; });
+          var expert = wKids.find(function (r) { return r.n.indexOf("experts (×896") === 0; });
+          if (expert) {
+            expert.big = true;
+            expert.why = ["896 numbered expert slots repeat through 92 model layers — 82,432 " +
+                          "distinct expert modules in the file.",
+                          "Open a range to reach any slot exactly. Each slot contains gate, up, " +
+                          "and down slices in every expert-bearing layer."];
+            expert.hint = "Open a range, then one numbered expert slot.";
+            expert.kids = expertBands(0, 896, 64, expert.v / 896);
+          }
         }
 
         return {
@@ -2024,18 +2066,32 @@ window.__files = F;
         try { history[push ? "pushState" : "replaceState"](s, "", location.href); } catch (e) {}
       }
 
+      function frame(rect, origin, opacity, offset) {
+        var f = {
+          left: (rect.left - origin.left) + "px", top: (rect.top - origin.top) + "px",
+          width: rect.width + "px", height: rect.height + "px"
+        };
+        if (opacity != null) f.opacity = opacity;
+        if (offset != null) f.offset = offset;
+        return f;
+      }
+
       function move(next, direction, source) {
+        if (finishMove) finishMove(false);
         var old = path.slice();
         var targetIndex = direction === "in" ? next[old.length] : old[next.length];
         source = source || (direction === "in" ? stack.children[targetIndex] : stack);
-        var viewX = window.scrollX, viewY = window.scrollY;
+        var viewX = window.scrollX, viewY = window.scrollY, oldColY = col.scrollTop;
+        scrolls[old.join(",")] = oldColY;
+        var nextKey = next.join(","), colY = Object.prototype.hasOwnProperty.call(scrolls, nextKey)
+          ? scrolls[nextKey] : 0;
         document.documentElement.classList.add("xmoving");
 
         if (reduceMotion.matches || !source || !source.animate) {
           path = next.slice(); draw(false);
-          window.scrollTo(viewX, viewY);
+          col.scrollTop = colY; window.scrollTo(viewX, viewY);
           requestAnimationFrame(function () {
-            window.scrollTo(viewX, viewY);
+            col.scrollTop = colY; window.scrollTo(viewX, viewY);
             document.documentElement.classList.remove("xmoving");
           });
           var focus = direction === "back" ? stack.children[targetIndex] : crumb.querySelector(".xback");
@@ -2044,58 +2100,72 @@ window.__files = F;
         }
 
         var from = source.getBoundingClientRect();
-        var ghost = source.cloneNode(true);
-        ghost.removeAttribute("id");
-        ghost.setAttribute("aria-hidden", "true");
-        ghost.classList.add("xflight");
-        ghost.style.left = from.left + "px";
-        ghost.style.top = from.top + "px";
-        ghost.style.width = from.width + "px";
-        ghost.style.height = from.height + "px";
-        document.body.appendChild(ghost);
+        var oldBox = stack.getBoundingClientRect();
+        var oldLayer = stack.cloneNode(true);
         moving = true; col.classList.add("moving");
 
         path = next.slice(); draw(false);
-        window.scrollTo(viewX, viewY);
-        requestAnimationFrame(function () { window.scrollTo(viewX, viewY); });
+        col.scrollTop = colY; window.scrollTo(viewX, viewY);
+        requestAnimationFrame(function () { col.scrollTop = colY; window.scrollTo(viewX, viewY); });
         var target = direction === "in" ? stack : stack.children[targetIndex];
         if (!target) {
-          ghost.remove(); moving = false; col.classList.remove("moving");
+          moving = false; col.classList.remove("moving");
           document.documentElement.classList.remove("xmoving");
           return;
         }
 
         var to = target.getBoundingClientRect();
-        var stackBox = stack.getBoundingClientRect();
-        var origin = (direction === "in" ? from.top + from.height / 2 : to.top + to.height / 2) - stackBox.top;
-        origin = Math.max(0, Math.min(stackBox.height, origin));
-        var end = "translate3d(" + (to.left - from.left) + "px," + (to.top - from.top) + "px,0) " +
-                  "scale(" + (to.width / from.width) + "," + (to.height / from.height) + ")";
-        var duration = direction === "in" ? 420 : 320;
-        Array.prototype.forEach.call(ghost.querySelectorAll(".xn,.xv,.xd"), function (label) {
-          label.animate([{ opacity: 1 }, { opacity: 0 }],
-                        { duration: 110, easing: "ease-out", fill: "both" });
-        });
-        if (direction === "back") target.style.visibility = "hidden";
-        var flight = ghost.animate([
-          { transform: "translate3d(0,0,0) scale(1,1)", opacity: 1 },
-          { transform: end, opacity: 1, offset: .82 },
-          { transform: end, opacity: 0 }
-        ], { duration: duration, easing: "cubic-bezier(.16,1,.3,1)", fill: "both" });
-        var reveal = stack.animate([
-          { clipPath: "inset(" + origin + "px 0 " + (stackBox.height - origin) + "px 0)", opacity: .08 },
-          { clipPath: "inset(0)", opacity: 1 }
-        ], { duration: direction === "in" ? 300 : 220, delay: direction === "in" ? 90 : 40,
-             easing: "cubic-bezier(.16,1,.3,1)", fill: "both" });
+        var fileBox = file.getBoundingClientRect();
+        var newBox = stack.getBoundingClientRect();
+        var newLayer = stack.cloneNode(true);
+        var stage = el("div", "xmotion-stage");
+        stage.setAttribute("aria-hidden", "true"); stage.setAttribute("inert", "");
+        oldLayer.removeAttribute("id"); oldLayer.classList.add("xmotion-content", "xold");
+        newLayer.removeAttribute("id"); newLayer.classList.add("xmotion-content", "xnew");
+        Object.assign(oldLayer.style, frame(oldBox, fileBox));
+        Object.assign(newLayer.style, frame(newBox, fileBox));
+        var seed = direction === "in" ? source : target;
+        var shell = el("div", "xseg xmotion-shell" + (seed.classList.contains("big") ? " big" : ""));
+        stage.appendChild(oldLayer); stage.appendChild(newLayer); stage.appendChild(shell);
+        file.appendChild(stage); stack.style.visibility = "hidden";
 
-        Promise.allSettled([flight.finished, reveal.finished]).then(function () {
-          reveal.cancel(); target.style.visibility = ""; ghost.remove();
+        var duration = direction === "in" ? 360 : 300;
+        var motions = [], done = false;
+        function finish(setFocus) {
+          if (done) return;
+          done = true;
+          motions.forEach(function (animation) { animation.cancel(); });
+          stack.style.visibility = ""; stage.remove();
           moving = false; col.classList.remove("moving");
-          window.scrollTo(viewX, viewY);
+          col.scrollTop = colY; window.scrollTo(viewX, viewY);
           document.documentElement.classList.remove("xmoving");
-          var focus = direction === "back" ? target : crumb.querySelector(".xback");
-          if (focus) focus.focus({ preventScroll: true });
-        });
+          if (finishMove === finish) finishMove = null;
+          if (setFocus !== false) {
+            var focus = direction === "back" ? target : crumb.querySelector(".xback");
+            if (focus) focus.focus({ preventScroll: true });
+          }
+        }
+        finishMove = finish;
+
+        try {
+          motions = [
+            shell.animate([
+              Object.assign(frame(from, fileBox, 1, 0), { easing: "cubic-bezier(.4,0,.2,1)" }),
+              frame(to, fileBox, 1, direction === "in" ? .68 : .65),
+              frame(to, fileBox, 0, 1)
+            ], { duration: duration, easing: "linear", fill: "both" }),
+            oldLayer.animate([
+              { opacity: 1, offset: 0 }, { opacity: 1, offset: .28 },
+              { opacity: 0, offset: .56 }, { opacity: 0, offset: 1 }
+            ], { duration: duration, easing: "linear", fill: "both" }),
+            newLayer.animate([
+              { opacity: 0, offset: 0 }, { opacity: 0, offset: .56 },
+              { opacity: 1, offset: .88 }, { opacity: 1, offset: 1 }
+            ], { duration: duration, easing: "linear", fill: "both" })
+          ];
+          Promise.allSettled(motions.map(function (animation) { return animation.finished; }))
+            .then(function () { finish(true); });
+        } catch (e) { finish(true); }
       }
 
       function draw(animate) {
@@ -2200,9 +2270,12 @@ window.__files = F;
 
       return {
         load: function (m, d, ex, nsh) {
+          if (finishMove) finishMove(false);
+          scrolls = {};
           root = build(m, d, ex, nsh); modelId = m.id;
           var saved = state(); path = saved ? saved.path.slice() : [];
           draw(false);
+          col.scrollTop = 0;
           if (!saved) remember(path, false);
         }
       };
