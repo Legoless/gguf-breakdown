@@ -469,7 +469,7 @@
     will-change:opacity}
   .xmotion-shell{position:absolute!important;z-index:1;margin:0!important;min-height:0!important;
     padding:0!important;box-sizing:border-box;background:var(--paper-2)!important;transition:none!important;
-    pointer-events:none;contain:layout paint;will-change:left,top,width,height,opacity}
+    pointer-events:none;contain:layout paint;will-change:top,height,opacity}
   .xcol.moving{pointer-events:none}
 
   .xseg{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;
@@ -2066,10 +2066,11 @@ window.__files = F;
         try { history[push ? "pushState" : "replaceState"](s, "", location.href); } catch (e) {}
       }
 
-      function frame(rect, origin, opacity, offset) {
+      function frame(rect, origin, opacity, offset, horizontal) {
+        horizontal = horizontal || rect;
         var f = {
-          left: (rect.left - origin.left) + "px", top: (rect.top - origin.top) + "px",
-          width: rect.width + "px", height: rect.height + "px"
+          left: (horizontal.left - origin.left) + "px", top: (rect.top - origin.top) + "px",
+          width: horizontal.width + "px", height: rect.height + "px"
         };
         if (opacity != null) f.opacity = opacity;
         if (offset != null) f.offset = offset;
@@ -2125,6 +2126,7 @@ window.__files = F;
         Object.assign(oldLayer.style, frame(oldBox, fileBox));
         Object.assign(newLayer.style, frame(newBox, fileBox));
         var seed = direction === "in" ? source : target;
+        var horizontal = direction === "in" ? from : to;
         var shell = el("div", "xseg xmotion-shell" + (seed.classList.contains("big") ? " big" : ""));
         stage.appendChild(oldLayer); stage.appendChild(newLayer); stage.appendChild(shell);
         file.appendChild(stage); stack.style.visibility = "hidden";
@@ -2150,9 +2152,9 @@ window.__files = F;
         try {
           motions = [
             shell.animate([
-              Object.assign(frame(from, fileBox, 1, 0), { easing: "cubic-bezier(.4,0,.2,1)" }),
-              frame(to, fileBox, 1, direction === "in" ? .68 : .65),
-              frame(to, fileBox, 0, 1)
+              Object.assign(frame(from, fileBox, 1, 0, horizontal), { easing: "cubic-bezier(.4,0,.2,1)" }),
+              frame(to, fileBox, 1, direction === "in" ? .68 : .65, horizontal),
+              frame(to, fileBox, 0, 1, horizontal)
             ], { duration: duration, easing: "linear", fill: "both" }),
             oldLayer.animate([
               { opacity: 1, offset: 0 }, { opacity: 1, offset: .28 },

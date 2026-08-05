@@ -65,6 +65,13 @@ async function run() {
     if (response.exceptionDetails) throw new Error(`${response.exceptionDetails.text}: ${expression}`);
     return response.result.value;
   };
+  const shellHorizontalFrames = `(() => {
+    const frames = document.querySelector('.xmotion-shell').getAnimations()[0].effect.getKeyframes();
+    return {
+      leftPositions: new Set(frames.map(frame => frame.left)).size,
+      widths: new Set(frames.map(frame => frame.width)).size
+    };
+  })()`;
 
   await command("Runtime.enable");
   for (let tries = 0; tries < 40; tries++) {
@@ -82,6 +89,7 @@ async function run() {
   assert.equal(await value("document.querySelectorAll('.xmotion-stage .xnew').length"), 1);
   assert.equal(await value("document.querySelectorAll('.xmotion-shell').length"), 1);
   assert.equal(await value("document.querySelector('.xmotion-shell').children.length"), 0);
+  assert.deepEqual(await value(shellHorizontalFrames), { leftPositions: 1, widths: 1 });
   assert.ok(await value(`Math.abs(window.scrollY - ${scrollTop}) < 1`), "forward drill should not move the page");
   assert.ok(await value(`document.querySelector('.xmotion-shell').getBoundingClientRect().height > ${firstHeight}`),
             "forward shell should expand");
@@ -126,6 +134,7 @@ async function run() {
   await wait(50);
   assert.equal(await value("document.querySelectorAll('.xmotion-stage .xold').length"), 1);
   assert.equal(await value("document.querySelectorAll('.xmotion-shell').length"), 1);
+  assert.deepEqual(await value(shellHorizontalFrames), { leftPositions: 1, widths: 1 });
   assert.ok(await value(`document.querySelector('.xmotion-shell').getBoundingClientRect().height < ${terminalHeight}`),
             "back shell should contract");
   await wait(400);
