@@ -106,53 +106,8 @@ table{border-collapse:collapse}
   .wrap { max-width: 1140px; margin: 0 auto; padding: 0 var(--s3); }
 
   .cols {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--s4);
     align-items: start;
   }
-  @media (min-width: 940px) {
-    .cols { grid-template-columns: 190px minmax(0, 1fr); gap: var(--s6); }
-  }
-
-  /* ---------- rail ---------- */
-
-  .rail { display: none; }
-  @media (min-width: 940px) {
-    .rail {
-      display: block;
-      position: sticky;
-      top: var(--s4);
-      font-family: var(--f-mono);
-      font-size: 11.5px;
-      letter-spacing: .04em;
-    }
-  }
-  .rail-title {
-    text-transform: uppercase;
-    letter-spacing: .16em;
-    color: var(--muted);
-    font-size: 10px;
-    padding-bottom: var(--s2);
-    border-bottom: 1px solid var(--rule);
-    margin-bottom: var(--s2);
-  }
-  .rail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-  .rail-list a {
-    display: grid;
-    grid-template-columns: 22px 1fr;
-    gap: var(--s1);
-    padding: 5px 8px 5px 0;
-    color: var(--muted);
-    text-decoration: none;
-    border-left: 2px solid transparent;
-    padding-left: 10px;
-    transition: color .18s, border-color .18s;
-  }
-  .rail-list a:hover { color: var(--ink); }
-  .rail-list a:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 2px; }
-  .rail-list a.on { color: var(--ink); border-left-color: var(--signal); }
-  .rail-list .n { color: var(--signal); font-variant-numeric: tabular-nums; }
 
   /* ---------- hero ---------- */
 
@@ -506,8 +461,9 @@ table{border-collapse:collapse}
   /* ---------- file explorer ---------- */
   .explorer{display:grid;grid-template-columns:1fr;gap:var(--s3);margin:var(--s3) 0 0}
   @media (min-width:900px){
-    .explorer{grid-template-columns:clamp(260px,26vw,330px) minmax(0,1fr);gap:var(--s5)}
-    .xcol{position:sticky;top:70px;align-self:start}
+    .explorer{grid-template-columns:minmax(0,1fr) clamp(260px,26vw,330px);grid-template-areas:"pane navigator";gap:var(--s5)}
+    .xcol{grid-area:navigator;position:sticky;top:70px;align-self:start;max-height:calc(100vh - 90px);overflow-y:auto}
+    .xpane{grid-area:pane}
   }
 
   .xcol{display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -516,6 +472,7 @@ table{border-collapse:collapse}
   .xcrumb button{background:none;border:0;padding:0;font:inherit;color:var(--signal);
     cursor:pointer;border-bottom:1px solid transparent}
   .xcrumb button:hover{color:var(--ink);border-bottom-color:var(--muted)}
+  .xcrumb .xback::before{content:"← ";color:var(--muted)}
   .xcrumb .sep{color:var(--muted);opacity:.5}
   .xcrumb .here{color:var(--ink)}
 
@@ -527,16 +484,28 @@ table{border-collapse:collapse}
     border-left:1px solid var(--rule);padding-left:12px}
   @media (max-width:899px){.xstack{min-height:420px}}
 
+  ::view-transition-old(root),
+  ::view-transition-new(root){animation:none;mix-blend-mode:normal}
+  ::view-transition-old(root){opacity:0}
+  ::view-transition-group(x-drill),
+  ::view-transition-old(x-drill),
+  ::view-transition-new(x-drill){
+    animation-duration:.36s;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+  ::view-transition-image-pair(x-drill){overflow:clip;border-radius:4px}
+  ::view-transition-old(x-drill),
+  ::view-transition-new(x-drill){mix-blend-mode:normal}
+
   .xseg{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;
     border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);
     padding:10px 30px 10px 15px;text-align:left;font:inherit;color:inherit;cursor:default;
-    min-height:52px;overflow:hidden;
+    min-height:52px;
     transition:background .22s ease,border-color .22s ease,flex-grow .42s cubic-bezier(.2,.7,.3,1)}
   .xseg::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
     background:var(--signal);opacity:.55;transition:width .22s ease,opacity .22s ease}
   .xseg.big::before{background:var(--brass)}
   .xseg .xn{font-family:var(--f-mono);font-size:12.5px;line-height:1.25;color:var(--ink);
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    white-space:normal;overflow-wrap:anywhere}
+  .xseg .xd{font-size:11.5px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
   .xseg .xv{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);
     font-variant-numeric:tabular-nums}
   .xseg.can{cursor:pointer}
@@ -562,6 +531,9 @@ table{border-collapse:collapse}
   @media (prefers-reduced-motion:reduce){
     .xpane.swap{animation:none}
     .xseg{transition:background .22s ease,border-color .22s ease}
+    ::view-transition-group(x-drill),
+    ::view-transition-old(x-drill),
+    ::view-transition-new(x-drill){animation:none}
   }
   .xeyebrow{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;
     letter-spacing:.18em;color:var(--muted);margin-bottom:10px}
@@ -900,17 +872,6 @@ table{border-collapse:collapse}
 
 <div class="wrap">
 <div class="cols">
-
-  <nav class="rail" aria-label="Load sequence">
-    <div class="rail-title">Load sequence</div>
-    <ul class="rail-list">
-      <li><a href="#s1"><span class="n">01</span><span>Open the file</span></a></li>
-      <li><a href="#s4"><span class="n">02</span><span>Mapped, not loaded</span></a></li>
-      <li><a href="#s5"><span class="n">03</span><span>Packed small</span></a></li>
-      <li><a href="#s8"><span class="n">04</span><span>Running it</span></a></li>
-      <li class="railgap"><a href="#deep"><span class="n">▾</span><span>A real file</span></a></li>
-    </ul>
-  </nav>
 
   <main>
 
@@ -1929,6 +1890,13 @@ window.__files = F;
       k.anatomy.rows.forEach(function (r) { anat[r.l] = r.b; });
       var embed = 0;
       k.extra.forEach(function (t) { if (t.n.indexOf("token_embd") === 0) embed = t.b; });
+      var ROLE_WHY = {
+        "experts (×896, stacked)": "The 896 routed expert sets; 16 run for each token.",
+        "attention": "Weights that decide which earlier tokens matter.",
+        "shared experts": "Expert weights that run for every token.",
+        "linear-attention machinery": "Weights for the fixed-state attention layers.",
+        "expert in / out projection": "Moves token vectors into and out of the experts."
+      };
       MODELS.k3 = {
         label: "Kimi K3", arch: "kimi-k3", name: "Kimi-K3-mxfp4-00001-of-00004.gguf", L: 93, H: 7168, vocab: 163840, ctx: 1048576,
         total: k.expert.params, active: k.expert.activeParams, meta: k.metaBytes,
@@ -1949,7 +1917,9 @@ window.__files = F;
                  ["shared expert", anat["Shared expert · always runs"]],
                  ["router + projections", anat["Expert in / out projection"] + anat["Router · picks the 16"]]],
           layer: layer.b, embed: embed,
-          segs: k.roles.slice(0, 5).map(function (r) { return { n: r.r, v: r.b }; }),
+          segs: k.roles.slice(0, 5).map(function (r) {
+            return { n: r.r, v: r.b, why: ROLE_WHY[r.r] };
+          }),
           index: k.indexBytes, entries: k.nt,
           stored: k.expert.stored, read: k.expert.read,
           kv: 217e6 + 24 * 576 * 2 * 1048576,
@@ -1960,13 +1930,14 @@ window.__files = F;
 
 
     /* ---------------- the file explorer ----------------
-       Left: the file top to bottom. Right: what you are looking at.
+       Left: what you are looking at. Right: the file top to bottom.
        Clicking a part descends into it; the breadcrumb climbs back. ------- */
     var explorer = (function () {
       var stack = document.getElementById("xstack"),
           crumb = document.getElementById("xcrumb"),
           pane  = document.getElementById("xpane");
-      var root = null, path = [];
+      var root = null, path = [], modelId = null;
+      var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
       function sz(b) {
         if (b >= 1e12) return (b / 1e12).toFixed(2) + " TB";
@@ -1980,6 +1951,10 @@ window.__files = F;
         if (c) e.className = c;
         if (h != null) e.innerHTML = h;
         return e;
+      }
+      function whyList(node) {
+        if (!node || !node.why) return [];
+        return Array.isArray(node.why) ? node.why : [node.why];
       }
 
       function build(m, d, ex, nsh) {
@@ -2017,7 +1992,9 @@ window.__files = F;
           });
         }
 
-        var wKids = (d.segs || []).map(function (x) { return { n: x.n, v: x.v }; });
+        var wKids = (d.segs || []).map(function (x) {
+          return { n: x.n, v: x.v, why: x.why };
+        });
         if (wKids.length) {
           var sc = blob / wKids.reduce(function (a, r) { return a + r.v; }, 0);
           wKids.forEach(function (r) { r.v *= sc; });
@@ -2029,7 +2006,7 @@ window.__files = F;
                 ". It reads top to bottom, and there are only two kinds of thing in it: a small " +
                 "<b>label</b> at the front, and the model's <b>numbers</b> after it.",
                 "The label is under a thousandth of the whole. Everything else is the model."],
-          hint: "Pick a part on the left.",
+          hint: "Pick a part on the right.",
           kids: [
             { n: "header", v: hdr, big: false,
               why: ["The first 24 bytes" + (many ? " of each file" : "") + ", and they never vary. " +
@@ -2069,6 +2046,52 @@ window.__files = F;
 
       function at() { var n = root; path.forEach(function (i) { n = n.kids[i]; }); return n; }
 
+      function state() {
+        var s = history.state && history.state.ggufExplorer;
+        return s && s.model === modelId && Array.isArray(s.path) ? s : null;
+      }
+
+      function remember(next, push) {
+        var s = Object.assign({}, history.state || {});
+        s.ggufExplorer = { model: modelId, path: next.slice() };
+        try { history[push ? "pushState" : "replaceState"](s, "", location.href); } catch (e) {}
+      }
+
+      function move(next, direction, source) {
+        var old = path.slice();
+        var targetIndex = direction === "in" ? next[old.length] : old[next.length];
+        source = source || (direction === "in" ? stack.children[targetIndex] : stack);
+
+        if (reduceMotion.matches || !document.startViewTransition || !source) {
+          path = next.slice(); draw(false);
+          var focus = direction === "back" ? stack.children[targetIndex] : crumb.querySelector(".xback");
+          if (focus) focus.focus({ preventScroll: true });
+          return;
+        }
+
+        source.style.viewTransitionName = "x-drill";
+        var target;
+        var transition = document.startViewTransition(function () {
+          source.style.viewTransitionName = "";
+          path = next.slice(); draw(false);
+          target = direction === "in" ? stack : stack.children[targetIndex];
+          if (target) target.style.viewTransitionName = "x-drill";
+        });
+
+        function clear() {
+          source.style.viewTransitionName = "";
+          if (target) target.style.viewTransitionName = "";
+        }
+        transition.ready.then(clear, clear);
+        transition.finished.then(function () {
+          clear();
+          var focus = direction === "back" ? target : crumb.querySelector(".xback");
+          if (focus) focus.focus({ preventScroll: true });
+        }, function () {
+          clear();
+        });
+      }
+
       function draw(animate) {
         var cur = at(), kids = cur.kids || [];
         var total = kids.reduce(function (a, k) { return a + k.v; }, 0) || 1;
@@ -2081,13 +2104,18 @@ window.__files = F;
         stack.textContent = "";
         kids.forEach(function (k, i) {
           var can = !!(k.kids && k.kids.length);
-          var seg = el(can ? "button" : "div",
-                       "xseg" + (k.big ? " big" : "") + (can ? " can" : ""),
-                       '<span class="xn">' + k.n + '</span><span class="xv">' + sz(k.v) + "</span>");
-          seg.style.flex = g[i] + " 1 0";
-          if (can) { seg.type = "button"; seg.title = "Open " + k.n; }
+          var desc = top ? "" : whyList(k)[0];
+          var seg = el("button", "xseg" + (k.big ? " big" : "") + (can ? " can" : ""),
+                       '<span class="xn">' + k.n + '</span><span class="xv">' + sz(k.v) + "</span>" +
+                       (desc ? '<span class="xd">' + desc + "</span>" : ""));
+          seg.style.flex = g[i] + " 0 auto";
+          seg.type = "button";
+          seg.title = (can ? "Open " : "Show details for ") + k.n;
           seg.addEventListener("click", function () {
-            if (can) { path.push(i); draw(true); }
+            if (can) {
+              var next = path.concat(i);
+              remember(next, true); move(next, "in", seg);
+            }
             else { show(k, cur); mark(seg); }
           });
           stack.appendChild(seg);
@@ -2105,7 +2133,13 @@ window.__files = F;
           else {
             var b = el("button", null, t.n);
             b.type = "button";
-            b.addEventListener("click", function () { path = path.slice(0, i); draw(true); });
+            if (i === trail.length - 2) b.className = "xback";
+            b.setAttribute("aria-label", "Back to " + t.n);
+            b.addEventListener("click", function () {
+              var next = path.slice(0, i), s = state();
+              if (s && s.path.length === path.length) history.go(i - path.length);
+              else { remember(next, false); move(next, "back"); }
+            });
             crumb.appendChild(b);
           }
         });
@@ -2125,7 +2159,7 @@ window.__files = F;
         pane.appendChild(el("h3", "xtitle", node.n));
         pane.appendChild(el("div", "xsize" + (node.big ? " big" : ""), sz(node.v)));
         var body = el("div", "xbody");
-        (node.why || []).forEach(function (t) { body.appendChild(el("p", null, t)); });
+        whyList(node).forEach(function (t) { body.appendChild(el("p", null, t)); });
         pane.appendChild(body);
 
         if (node.kids && node.kids.length) {
@@ -2141,7 +2175,7 @@ window.__files = F;
             var cell = el("span"); cell.appendChild(bar); row.appendChild(cell);
             row.appendChild(el("span", "rv", sz(k.v)));
             item.appendChild(row);
-            if (k.why) item.appendChild(el("p", "xhint", k.why));
+            if (whyList(k)[0]) item.appendChild(el("p", "xhint", whyList(k)[0]));
             box.appendChild(item);
           });
           if (node.hint) box.appendChild(el("p", "xhint", node.hint));
@@ -2151,9 +2185,19 @@ window.__files = F;
         }
       }
 
+      window.addEventListener("popstate", function (event) {
+        var s = event.state && event.state.ggufExplorer;
+        if (!root || !s || s.model !== modelId || !Array.isArray(s.path)) return;
+        if (s.path.join(",") === path.join(",")) return;
+        move(s.path, s.path.length < path.length ? "back" : "in");
+      });
+
       return {
         load: function (m, d, ex, nsh) {
-          root = build(m, d, ex, nsh); path = []; draw(false);
+          root = build(m, d, ex, nsh); modelId = m.id;
+          var saved = state(); path = saved ? saved.path.slice() : [];
+          draw(false);
+          if (!saved) remember(path, false);
         }
       };
     })();
@@ -2204,14 +2248,20 @@ window.__files = F;
 
       m.q.forEach(function (r) { if (r[0] === "Q4_K_M") q4 = r[1] * 1e9; });
 
-      var segs = [{ n: "vocabulary lookup", v: embed }];
-      if (ple) segs.push({ n: "per-layer embeddings", v: ple });
-      segs.push({ n: "attention", v: attn * m.L });
+      var segs = [{ n: "vocabulary lookup", v: embed,
+                    why: "Turns each token into the vector that enters the model." }];
+      if (ple) segs.push({ n: "per-layer embeddings", v: ple,
+                           why: "Extra token vectors used at each layer." });
+      segs.push({ n: "attention", v: attn * m.L,
+                  why: "Weights that decide which earlier tokens matter." });
       if (experts) {
-        segs.push({ n: m.experts + " experts", v: experts * m.L });
-        segs.push({ n: "shared expert", v: dense * m.L });
+        segs.push({ n: m.experts + " experts", v: experts * m.L,
+                    why: "Alternative feed-forward weights; the router chooses a few for each token." });
+        segs.push({ n: "shared expert", v: dense * m.L,
+                    why: "Feed-forward weights that run for every token." });
       } else {
-        segs.push({ n: "feed-forward", v: dense * m.L });
+        segs.push({ n: "feed-forward", v: dense * m.L,
+                    why: "Weights that transform each token after attention." });
       }
 
       var bptl = m.nkv * m.hd * 2 * 2,
@@ -2365,24 +2415,6 @@ window.__files = F;
       document.querySelectorAll(".rise").forEach(function (el) { el.classList.add("in"); });
     }
 
-    var links = {};
-    document.querySelectorAll(".rail-list a").forEach(function (a) {
-      links[a.getAttribute("href").slice(1)] = a;
-    });
-
-    if ("IntersectionObserver" in window) {
-      var tracker = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) {
-          var a = links[e.target.id];
-          if (!a) return;
-          if (e.isIntersecting) {
-            Object.keys(links).forEach(function (k) { links[k].classList.remove("on"); });
-            a.classList.add("on");
-          }
-        });
-      }, { rootMargin: "-20% 0px -60% 0px" });
-      document.querySelectorAll("section.step").forEach(function (s) { tracker.observe(s); });
-    }
   })();
 
 
@@ -2401,7 +2433,10 @@ window.__files = F;
       function(s){ return s.id; }));
   var notice = document.getElementById("nofile");
 
-  function select(id){
+  function select(id, fromHistory){
+    if (!fromHistory) {
+      try { history.replaceState(history.state, "", "#" + id); } catch (e) {}
+    }
     if (sel.value !== id) sel.value = id;
     document.getElementById("mbnote").textContent = SUB[id] || "";
     window.__renderModel(id);
@@ -2422,10 +2457,13 @@ window.__files = F;
       notice.hidden = false;
       document.getElementById("nofileName").textContent = NAME[id];
     }
-    try { history.replaceState(null, "", "#" + id); } catch (e) {}
   }
 
   sel.addEventListener("change", function(){ select(sel.value); });
+  window.addEventListener("popstate", function(event){
+    var s = event.state && event.state.ggufExplorer;
+    if (s && NAME[s.model] && s.model !== sel.value) select(s.model, true);
+  });
   document.getElementById("nofileSwitch").addEventListener("click", function(){
     select("12b");
     document.getElementById("part2").scrollIntoView({ behavior: "smooth", block: "start" });
