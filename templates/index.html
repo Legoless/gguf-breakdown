@@ -436,6 +436,7 @@
 
 
   /* ---------- file explorer ---------- */
+  html.xmoving{overflow-anchor:none;scroll-behavior:auto}
   .explorer{display:grid;grid-template-columns:1fr;gap:var(--s3);margin:var(--s3) 0 0}
   @media (min-width:900px){
     .explorer{grid-template-columns:minmax(0,1fr) clamp(260px,26vw,330px);grid-template-areas:"pane navigator";gap:var(--s5)}
@@ -461,16 +462,11 @@
     border-left:1px solid var(--rule);padding-left:12px}
   @media (max-width:899px){.xstack{min-height:420px}}
 
-  ::view-transition-old(root),
-  ::view-transition-new(root){animation:none;mix-blend-mode:normal}
-  ::view-transition-old(root){opacity:0}
-  ::view-transition-group(x-drill),
-  ::view-transition-old(x-drill),
-  ::view-transition-new(x-drill){
-    animation-duration:.36s;animation-timing-function:cubic-bezier(.16,1,.3,1)}
-  ::view-transition-image-pair(x-drill){overflow:clip;border-radius:4px}
-  ::view-transition-old(x-drill),
-  ::view-transition-new(x-drill){mix-blend-mode:normal}
+  .xflight{position:fixed!important;z-index:80;margin:0!important;min-height:0!important;
+    pointer-events:none;transform-origin:top left;overflow:hidden!important;
+    contain:layout paint;will-change:transform,opacity}
+  .xflight.xstack{max-height:none;background:var(--paper)}
+  .xcol.moving{pointer-events:none}
 
   .xseg{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;
     border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);
@@ -494,12 +490,8 @@
   .xseg.can:hover::before{width:5px;opacity:1}
   .xseg.big.can:hover{border-color:var(--brass);background:var(--brass-dim)}
   .xseg.big.can:hover::after{color:var(--brass)}
-  .xseg.on{border-color:var(--signal);background:var(--signal-dim)}
-  .xseg.on::before{width:5px;opacity:1}
-  .xseg.on .xn{color:var(--signal)}
-  .xseg.big.on{border-color:var(--brass);background:var(--brass-dim)}
-  .xseg.big.on .xn{color:var(--brass)}
   .xseg:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  .xseg.terminal{flex:1 0 auto;cursor:default}
 
   /* right-hand pane */
   .xpane{min-height:420px}
@@ -508,9 +500,6 @@
   @media (prefers-reduced-motion:reduce){
     .xpane.swap{animation:none}
     .xseg{transition:background .22s ease,border-color .22s ease}
-    ::view-transition-group(x-drill),
-    ::view-transition-old(x-drill),
-    ::view-transition-new(x-drill){animation:none}
   }
   .xeyebrow{font-family:var(--f-mono);font-size:10px;text-transform:uppercase;
     letter-spacing:.18em;color:var(--muted);margin-bottom:10px}
@@ -1912,8 +1901,9 @@ window.__files = F;
     var explorer = (function () {
       var stack = document.getElementById("xstack"),
           crumb = document.getElementById("xcrumb"),
-          pane  = document.getElementById("xpane");
-      var root = null, path = [], modelId = null;
+          pane  = document.getElementById("xpane"),
+          col   = stack.closest(".xcol");
+      var root = null, path = [], modelId = null, moving = false;
       var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
       function sz(b) {
@@ -2038,34 +2028,73 @@ window.__files = F;
         var old = path.slice();
         var targetIndex = direction === "in" ? next[old.length] : old[next.length];
         source = source || (direction === "in" ? stack.children[targetIndex] : stack);
+        var viewX = window.scrollX, viewY = window.scrollY;
+        document.documentElement.classList.add("xmoving");
 
-        if (reduceMotion.matches || !document.startViewTransition || !source) {
+        if (reduceMotion.matches || !source || !source.animate) {
           path = next.slice(); draw(false);
+          window.scrollTo(viewX, viewY);
+          requestAnimationFrame(function () {
+            window.scrollTo(viewX, viewY);
+            document.documentElement.classList.remove("xmoving");
+          });
           var focus = direction === "back" ? stack.children[targetIndex] : crumb.querySelector(".xback");
           if (focus) focus.focus({ preventScroll: true });
           return;
         }
 
-        source.style.viewTransitionName = "x-drill";
-        var target;
-        var transition = document.startViewTransition(function () {
-          source.style.viewTransitionName = "";
-          path = next.slice(); draw(false);
-          target = direction === "in" ? stack : stack.children[targetIndex];
-          if (target) target.style.viewTransitionName = "x-drill";
-        });
+        var from = source.getBoundingClientRect();
+        var ghost = source.cloneNode(true);
+        ghost.removeAttribute("id");
+        ghost.setAttribute("aria-hidden", "true");
+        ghost.classList.add("xflight");
+        ghost.style.left = from.left + "px";
+        ghost.style.top = from.top + "px";
+        ghost.style.width = from.width + "px";
+        ghost.style.height = from.height + "px";
+        document.body.appendChild(ghost);
+        moving = true; col.classList.add("moving");
 
-        function clear() {
-          source.style.viewTransitionName = "";
-          if (target) target.style.viewTransitionName = "";
+        path = next.slice(); draw(false);
+        window.scrollTo(viewX, viewY);
+        requestAnimationFrame(function () { window.scrollTo(viewX, viewY); });
+        var target = direction === "in" ? stack : stack.children[targetIndex];
+        if (!target) {
+          ghost.remove(); moving = false; col.classList.remove("moving");
+          document.documentElement.classList.remove("xmoving");
+          return;
         }
-        transition.ready.then(clear, clear);
-        transition.finished.then(function () {
-          clear();
+
+        var to = target.getBoundingClientRect();
+        var stackBox = stack.getBoundingClientRect();
+        var origin = (direction === "in" ? from.top + from.height / 2 : to.top + to.height / 2) - stackBox.top;
+        origin = Math.max(0, Math.min(stackBox.height, origin));
+        var end = "translate3d(" + (to.left - from.left) + "px," + (to.top - from.top) + "px,0) " +
+                  "scale(" + (to.width / from.width) + "," + (to.height / from.height) + ")";
+        var duration = direction === "in" ? 420 : 320;
+        Array.prototype.forEach.call(ghost.querySelectorAll(".xn,.xv,.xd"), function (label) {
+          label.animate([{ opacity: 1 }, { opacity: 0 }],
+                        { duration: 110, easing: "ease-out", fill: "both" });
+        });
+        if (direction === "back") target.style.visibility = "hidden";
+        var flight = ghost.animate([
+          { transform: "translate3d(0,0,0) scale(1,1)", opacity: 1 },
+          { transform: end, opacity: 1, offset: .82 },
+          { transform: end, opacity: 0 }
+        ], { duration: duration, easing: "cubic-bezier(.16,1,.3,1)", fill: "both" });
+        var reveal = stack.animate([
+          { clipPath: "inset(" + origin + "px 0 " + (stackBox.height - origin) + "px 0)", opacity: .08 },
+          { clipPath: "inset(0)", opacity: 1 }
+        ], { duration: direction === "in" ? 300 : 220, delay: direction === "in" ? 90 : 40,
+             easing: "cubic-bezier(.16,1,.3,1)", fill: "both" });
+
+        Promise.allSettled([flight.finished, reveal.finished]).then(function () {
+          reveal.cancel(); target.style.visibility = ""; ghost.remove();
+          moving = false; col.classList.remove("moving");
+          window.scrollTo(viewX, viewY);
+          document.documentElement.classList.remove("xmoving");
           var focus = direction === "back" ? target : crumb.querySelector(".xback");
           if (focus) focus.focus({ preventScroll: true });
-        }, function () {
-          clear();
         });
       }
 
@@ -2079,21 +2108,25 @@ window.__files = F;
         var g = top ? [0.5, 1.7, 0.9, 6.2] : share.map(function (x) { return Math.max(x, 0.09); });
 
         stack.textContent = "";
+        if (!kids.length && path.length) {
+          var terminal = el("div", "xseg terminal",
+                            '<span class="xn">' + cur.n + '</span><span class="xv">' + sz(cur.v) + "</span>" +
+                            (whyList(cur)[0] ? '<span class="xd">' + whyList(cur)[0] + "</span>" : ""));
+          terminal.setAttribute("aria-current", "page");
+          stack.appendChild(terminal);
+        }
         kids.forEach(function (k, i) {
-          var can = !!(k.kids && k.kids.length);
           var desc = top ? "" : whyList(k)[0];
-          var seg = el("button", "xseg" + (k.big ? " big" : "") + (can ? " can" : ""),
+          var seg = el("button", "xseg" + (k.big ? " big" : "") + " can",
                        '<span class="xn">' + k.n + '</span><span class="xv">' + sz(k.v) + "</span>" +
                        (desc ? '<span class="xd">' + desc + "</span>" : ""));
           seg.style.flex = g[i] + " 0 auto";
           seg.type = "button";
-          seg.title = (can ? "Open " : "Show details for ") + k.n;
+          seg.title = "Open " + k.n;
           seg.addEventListener("click", function () {
-            if (can) {
-              var next = path.concat(i);
-              remember(next, true); move(next, "in", seg);
-            }
-            else { show(k, cur); mark(seg); }
+            if (moving) return;
+            var next = path.concat(i);
+            remember(next, true); move(next, "in", seg);
           });
           stack.appendChild(seg);
         });
@@ -2113,6 +2146,7 @@ window.__files = F;
             if (i === trail.length - 2) b.className = "xback";
             b.setAttribute("aria-label", "Back to " + t.n);
             b.addEventListener("click", function () {
+              if (moving) return;
               var next = path.slice(0, i), s = state();
               if (s && s.path.length === path.length) history.go(i - path.length);
               else { remember(next, false); move(next, "back"); }
@@ -2121,11 +2155,6 @@ window.__files = F;
           }
         });
         show(cur, trail[trail.length - 2], animate);
-      }
-
-      function mark(seg) {
-        Array.prototype.forEach.call(stack.children, function (c) { c.classList.remove("on"); });
-        seg.classList.add("on");
       }
 
       function show(node, parent, animate) {

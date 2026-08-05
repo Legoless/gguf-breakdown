@@ -25,7 +25,7 @@ const chrome = spawn(chromePath, [
 ], { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"] });
 
 let id = 0, buffer = "";
-const pending = new Map(), errors = [], animations = [];
+const pending = new Map(), errors = [];
 
 chrome.stdio[4].setEncoding("utf8");
 chrome.stdio[4].on("data", chunk => {
@@ -41,8 +41,6 @@ chrome.stdio[4].on("data", chunk => {
       message.error ? call.reject(new Error(message.error.message)) : call.resolve(message.result);
     } else if (message.method === "Runtime.exceptionThrown") {
       errors.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
-    } else if (message.method === "Animation.animationStarted") {
-      animations.push(message.params.animation.name);
     }
   });
 });
@@ -69,26 +67,50 @@ async function run() {
   };
 
   await command("Runtime.enable");
-  await command("Animation.enable");
   for (let tries = 0; tries < 40; tries++) {
     if (await value("document.readyState === 'complete'")) break;
     await wait(50);
   }
 
   assert.equal(await value("document.querySelectorAll('#xstack .xseg').length"), 4);
+  await value("document.querySelector('.explorer').scrollIntoView({block:'center'}); true");
+  const scrollTop = await value("window.scrollY");
+  const firstHeight = await value("document.querySelector('#xstack .xseg').getBoundingClientRect().height");
   await value("document.querySelectorAll('#xstack .xseg')[0].click(); true");
+  await wait(50);
+  assert.equal(await value("document.querySelectorAll('.xflight.xseg').length"), 1);
+  assert.ok(await value(`Math.abs(window.scrollY - ${scrollTop}) < 1`));
+  assert.ok(await value(`document.querySelector('.xflight').getBoundingClientRect().height > ${firstHeight}`));
   await wait(400);
-  assert.ok(animations.some(name => name.includes("group-anim-x-drill")));
+  assert.equal(await value("document.querySelectorAll('.xflight').length"), 0);
+  assert.ok(await value(`Math.abs(window.scrollY - ${scrollTop}) < 1`));
   assert.deepEqual(await value(`({
     cards: document.querySelectorAll('#xstack .xseg').length,
     descriptions: document.querySelectorAll('#xstack .xd').length,
     buttons: document.querySelectorAll('#xstack button.xseg').length,
+    visible: [...document.querySelectorAll('#xstack .xseg')].every(e => e.scrollHeight <= e.clientHeight + 1),
     focus: document.activeElement.className
-  })`), { cards: 4, descriptions: 4, buttons: 4, focus: "xback" });
+  })`), { cards: 4, descriptions: 4, buttons: 4, visible: true, focus: "xback" });
 
   await value("document.querySelector('#xstack .xseg').click(); true");
+  await wait(50);
+  assert.equal(await value("document.querySelectorAll('.xflight.xseg').length"), 1);
+  await wait(400);
+  assert.equal(await value("document.querySelectorAll('#xstack .terminal').length"), 1);
+  assert.ok((await value("document.querySelector('.xcrumb').textContent")).includes("magic"));
   assert.equal(await value("document.querySelector('.xtitle').textContent"), "magic");
   assert.ok((await value("document.querySelector('.xbody').textContent")).includes("G, G, U, F"));
+  assert.ok((await value("document.querySelector('.terminal .xd').textContent")).includes("G, G, U, F"));
+  assert.equal(await value("document.querySelector('.terminal').scrollHeight <= document.querySelector('.terminal').clientHeight + 1"), true);
+
+  const terminalHeight = await value("document.querySelector('#xstack').getBoundingClientRect().height");
+  await value("document.querySelector('.xback').click(); true");
+  await wait(50);
+  assert.equal(await value("document.querySelectorAll('.xflight.xstack').length"), 1);
+  assert.ok(await value(`document.querySelector('.xflight').getBoundingClientRect().height < ${terminalHeight}`));
+  await wait(400);
+  assert.equal(await value("document.querySelectorAll('#xstack .xseg').length"), 4);
+  assert.ok((await value("document.querySelector('.xcrumb').textContent")).includes("header"));
 
   await value("document.querySelector('.xback').click(); true");
   await wait(400);
@@ -124,10 +146,16 @@ async function run() {
   await command("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-reduced-motion", value: "reduce" }],
   });
-  const drillCount = animations.filter(name => name.includes("group-anim-x-drill")).length;
+  assert.equal(await value("document.querySelector('.xcrumb').textContent"), "the whole file");
   await value("document.querySelector('#xstack .xseg').click(); true");
   await wait(50);
-  assert.equal(animations.filter(name => name.includes("group-anim-x-drill")).length, drillCount);
+  assert.equal(await value("document.querySelectorAll('.xflight').length"), 0);
+  assert.equal(await value("document.documentElement.classList.contains('xmoving')"), false);
+  assert.equal(await value("document.querySelectorAll('#xstack .xd').length"), 4);
+  await value("document.querySelector('#xstack .xseg').click(); true");
+  await wait(50);
+  assert.equal(await value("document.querySelectorAll('.xflight').length"), 0);
+  assert.equal(await value("document.querySelectorAll('#xstack .terminal').length"), 1);
   assert.deepEqual(errors, []);
 }
 
