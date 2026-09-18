@@ -79,6 +79,8 @@ async function run() {
     await wait(50);
   }
 
+  assert.equal(await value("document.querySelectorAll('.deep, #part2').length"), 0);
+  assert.equal(await value("document.body.textContent.includes('Look inside a real file, byte by byte')"), false);
   assert.equal(await value("document.querySelectorAll('#xstack .xseg').length"), 4);
   await value("document.documentElement.style.scrollBehavior='auto';document.querySelector('.explorer').scrollIntoView({block:'center'});true");
   const scrollTop = await value("window.scrollY");
